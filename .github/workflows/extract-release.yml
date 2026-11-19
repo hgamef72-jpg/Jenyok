@@ -29,9 +29,16 @@ jobs:
           unzip -q host.zip -d extracted/host
           unzip -q viewer.zip -d extracted/viewer
 
-      - name: Upload extracted source
+      - name: Upload Host
         uses: actions/upload-artifact@v4
         with:
-          name: jenyok-extracted-source
-          path: extracted/
+          name: jenyok-host-files
+          path: extracted/host/
+          retention-days: 1
+
+      - name: Upload Viewer
+        uses: actions/upload-artifact@v4
+        with:
+          name: jenyok-viewer-files
+          path: extracted/viewer/
           retention-days: 1
