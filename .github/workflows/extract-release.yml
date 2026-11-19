@@ -1,0 +1,37 @@
+name: Extract Release Source
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download Host ZIP
+        run: |
+          curl -L --fail \
+            "https://github.com/hgamef72-jpg/Jenyok/releases/download/1.0.0/Roblox12311-1.5.77-portable.zip" \
+            -o host.zip
+
+      - name: Download Viewer ZIP
+        run: |
+          curl -L --fail \
+            "https://github.com/hgamef72-jpg/Jenyok/releases/download/1.0.0/Viewer-1.5.77-portable.zip" \
+            -o viewer.zip
+
+      - name: Extract files
+        run: |
+          mkdir -p extracted/host extracted/viewer
+          unzip -q host.zip -d extracted/host
+          unzip -q viewer.zip -d extracted/viewer
+
+      - name: Upload extracted source
+        uses: actions/upload-artifact@v4
+        with:
+          name: jenyok-extracted-source
+          path: extracted/
+          retention-days: 1
