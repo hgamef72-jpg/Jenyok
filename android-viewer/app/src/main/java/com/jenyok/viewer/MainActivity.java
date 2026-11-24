@@ -355,7 +355,7 @@ public final class MainActivity extends Activity {
             String name="Remote PC";
             try { name=new String(Base64.decode(p[2],Base64.URL_SAFE|Base64.NO_WRAP),StandardCharsets.UTF_8); } catch(Exception ignored) {}
             int count=0; try { count=Integer.parseInt(p[3]); } catch(Exception ignored) {}
-            hosts.put(p[1],new HostInfo(p[1],name,count,p[4].equals("1"),p[5].equals("1")));
+            hosts.put(p[1],new HostInfo(p[1],name,count,p[5].equals("1"),p[4].equals("1")));
             return;
         }
         if (p.length==1 && p[0].equals("HOST_LIST_END")) {
@@ -402,9 +402,17 @@ public final class MainActivity extends Activity {
         if (p.length==2 && p[0].equals("HOST_AGENT_READY")) {
             agentReady=p[1].equals("1"); ui.post(this::refreshButtons); return;
         }
-        if (p.length==3 && p[0].equals("HOST_SESSION_STATUS")) {
-            // Host reports two independent status flags; do not interpret the first
-            // field as a stopped/running boolean without the original Viewer semantics.
+        if (p.length==2 && p[0].equals("HOST_SESSION_STATUS")) {
+            boolean online=p[1].equals("1");
+            HostInfo info=selectedHost==null?null:hosts.get(selectedHost);
+            if(info!=null) info.online=online;
+            ui.post(() -> {
+                if(info!=null) {
+                    hostName.setText(info.name + (online ? "  •  ONLINE" : "  •  OFFLINE"));
+                    rebuildHostPicker();
+                }
+                refreshButtons();
+            });
             return;
         }
         if (p.length==2 && p[0].equals("RECOVERY_ACCEPTED")) {
