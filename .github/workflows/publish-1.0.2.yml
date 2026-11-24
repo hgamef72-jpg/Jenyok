@@ -1,0 +1,83 @@
+name: Build and publish Jenyok 1.0.2
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/publish-1.0.2.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download fixed Windows portable packages
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p dist
+          gh release download v1.0.1 --repo "$GITHUB_REPOSITORY" --pattern "Viewer-1.5.77-portable-recovery-fix.zip" --dir dist
+          gh release download v1.0.1 --repo "$GITHUB_REPOSITORY" --pattern "Roblox12311-1.5.77-portable-recovery-fix.zip" --dir dist
+          mv dist/Viewer-1.5.77-portable-recovery-fix.zip dist/Viewer-1.5.77.zip
+          mv dist/Roblox12311-1.5.77-portable-recovery-fix.zip dist/Roblox12311-1.5.77.zip
+          unzip -t dist/Viewer-1.5.77.zip
+          unzip -t dist/Roblox12311-1.5.77.zip
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: ""
+
+      - name: Install Android SDK components
+        run: sdkmanager --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build Android Viewer APK
+        working-directory: android-viewer
+        run: gradle --no-daemon assembleDebug
+
+      - name: Verify Android APK
+        run: |
+          cp android-viewer/app/build/outputs/apk/debug/app-debug.apk dist/Viewer-1.5.77.apk
+          test -s dist/Viewer-1.5.77.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose dist/Viewer-1.5.77.apk
+          file dist/Viewer-1.5.77.apk
+
+      - name: Publish Jenyok 1.0.2
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NOTES="$(cat <<'EOF'
+          Jenyok 1.0.2
+
+          - Windows Viewer portable package.
+          - Windows Roblox12311 portable package with the Recovery Agent version handshake fix.
+          - Android Viewer APK (debug-signed test build).
+
+          The Android app is an early native Viewer implementation. The APK compiles and its signature is verified, but device/runtime behavior has not yet been tested. It does not yet implement every desktop Viewer feature.
+          EOF
+          )"
+
+          if gh release view v1.0.2 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload v1.0.2 dist/* --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit v1.0.2 --repo "$GITHUB_REPOSITORY" --title "Jenyok 1.0.2" --notes "$NOTES" --draft=false --latest
+          else
+            gh release create v1.0.2 dist/* --repo "$GITHUB_REPOSITORY" --title "Jenyok 1.0.2" --notes "$NOTES" --latest
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Jenyok-1.0.2-release-files
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14
