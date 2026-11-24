@@ -346,8 +346,9 @@ public final class MainActivity extends Activity {
         if (p.length==2 && p[0].equals("HOST_AGENT_READY")) {
             agentReady=p[1].equals("1"); ui.post(this::refreshButtons); return;
         }
-        if (p.length==2 && p[0].equals("HOST_SESSION_STATUS")) {
-            ui.post(() -> { if(p[1].equals("0") && agentReady) { screenHint.setVisibility(View.VISIBLE); screenHint.setText("HOST IS STOPPED\nTap HOST RECOVERY to restart"); } });
+        if (p.length==3 && p[0].equals("HOST_SESSION_STATUS")) {
+            // Host reports two independent status flags; do not interpret the first
+            // field as a stopped/running boolean without the original Viewer semantics.
             return;
         }
         if (p.length==2 && p[0].equals("RECOVERY_ACCEPTED")) {
@@ -408,11 +409,17 @@ public final class MainActivity extends Activity {
             if(candidate>=0 && candidate<32) monitor=candidate;
         }
         if(monitor!=selectedMonitor)return;
-        int scanLimit=Math.min(packet.length-1,64);
-        for(int i=0;i<scanLimit;i++) {
+        for(int i=0;i<packet.length-1;i++) {
             if((packet[i]&0xff)==0xff && (packet[i+1]&0xff)==0xd8){jpegStart=i;break;}
         }
         if(jpegStart<0)return;
+        if(jpegStart>=4) {
+            int be=ByteBuffer.wrap(packet,0,4).order(ByteOrder.BIG_ENDIAN).getInt();
+            int le=ByteBuffer.wrap(packet,0,4).order(ByteOrder.LITTLE_ENDIAN).getInt();
+            int candidate=(be>=0 && be<32)?be:((le>=0 && le<32)?le:monitor);
+            monitor=candidate;
+            if(monitor!=selectedMonitor)return;
+        }
         BitmapFactory.Options options=new BitmapFactory.Options();
         options.inPreferredConfig=Bitmap.Config.RGB_565;
         Bitmap bitmap=BitmapFactory.decodeByteArray(packet,jpegStart,packet.length-jpegStart,options);
