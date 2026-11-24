@@ -471,9 +471,14 @@ public final class MainActivity extends Activity {
     }
 
     private void handleFrame(byte[] packet) {
-        // Do not assume a binary header layout: the Host/relay framing is not
-        // guaranteed to expose a 4-byte monitor index to the Android client.
-        if (packet == null || packet.length < 4 || destroyed) return;
+        // HostApp.runHostSession prefixes every JPEG with a big-endian monitor index.
+        // Ignore other monitors before decoding so they cannot consume the mobile CPU.
+        if (packet == null || packet.length < 6 || destroyed) return;
+        int monitor = ((packet[0] & 0xff) << 24)
+                | ((packet[1] & 0xff) << 16)
+                | ((packet[2] & 0xff) << 8)
+                | (packet[3] & 0xff);
+        if (monitor != selectedMonitor) return;
         pendingFrame.set(packet);
         scheduleFrameDecode();
     }
@@ -542,11 +547,15 @@ public final class MainActivity extends Activity {
         if (packet == null || packet.length < 4) return null;
         // Find the JPEG start marker inside the WebSocket binary message. This
         // tolerates relay/host headers without guessing their undocumented layout.
-        int jpegStart = -1;
-        for (int i = 0; i < packet.length - 1; i++) {
-            if ((packet[i] & 0xff) == 0xff && (packet[i + 1] & 0xff) == 0xd8) {
-                jpegStart = i;
-                break;
+        int jpegStart = (packet.length >= 6 && (packet[4] & 0xff) == 0xff
+                && (packet[5] & 0xff) == 0xd8) ? 4 : -1;
+        // Fallback only for a relay that prepends additional metadata.
+        if (jpegStart < 0) {
+            for (int i = 0; i < packet.length - 1; i++) {
+                if ((packet[i] & 0xff) == 0xff && (packet[i + 1] & 0xff) == 0xd8) {
+                    jpegStart = i;
+                    break;
+                }
             }
         }
         if (jpegStart < 0 || packet.length - jpegStart < 4) return null;
