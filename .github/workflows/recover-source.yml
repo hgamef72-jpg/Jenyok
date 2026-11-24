@@ -3,7 +3,7 @@ name: Recover Jenyok Java Sources
 on:
   push:
     branches:
-      - recovery/decompile-run2
+      - recovery/decompile-run3
   workflow_dispatch:
 
 permissions:
@@ -16,7 +16,7 @@ jobs:
     steps:
       - name: Prepare workspace
         run: |
-          mkdir -p work/input work/decompiled/Host work/decompiled/Viewer recovered/Host/src/main/java recovered/Viewer/src/main/java recovered/binaries
+          mkdir -p work/input work/decompiled recovered/Host/src/main/java recovered/Viewer/src/main/java recovered/binaries
       - name: Download release archives
         run: |
           curl -fL --retry 3 -o work/input/Host.zip "https://github.com/hgamef72-jpg/Jenyok/releases/download/1.0.0/Roblox12311-1.5.77-portable.zip"
@@ -25,16 +25,15 @@ jobs:
           unzip -p work/input/Viewer.zip app/saturn-pc-remote.jar > recovered/binaries/Viewer-original.jar
           unzip -p work/input/Host.zip app/Roblox12311.cfg > recovered/Host/Roblox12311.cfg
           unzip -p work/input/Viewer.zip app/Viewer.cfg > recovered/Viewer/Viewer.cfg
-      - name: Download CFR decompiler
+      - name: Download Vineflower decompiler
         run: |
-          curl -fL --retry 3 -o work/cfr.jar "https://github.com/leibnitz27/cfr/releases/download/0.152/cfr-0.152.jar"
-      - name: Decompile Host and Viewer
+          curl -fL --retry 3 -o work/vineflower.jar "https://github.com/Vineflower/vineflower/releases/download/1.12.0/vineflower-1.12.0.jar"
+      - name: Decompile shared application JAR
         run: |
-          java -Xmx4g -jar work/cfr.jar recovered/binaries/Host-original.jar --outputdir work/decompiled/Host --silent true
-          java -Xmx4g -jar work/cfr.jar recovered/binaries/Viewer-original.jar --outputdir work/decompiled/Viewer --silent true
+          java -Xmx4g -jar work/vineflower.jar recovered/binaries/Host-original.jar work/decompiled
           mkdir -p recovered/Host/src/main/java/com/saturn/remote recovered/Viewer/src/main/java/com/saturn/remote
-          cp -a work/decompiled/Host/com/saturn/remote/. recovered/Host/src/main/java/com/saturn/remote/
-          cp -a work/decompiled/Viewer/com/saturn/remote/. recovered/Viewer/src/main/java/com/saturn/remote/
+          cp -a work/decompiled/com/saturn/remote/. recovered/Host/src/main/java/com/saturn/remote/
+          cp -a work/decompiled/com/saturn/remote/. recovered/Viewer/src/main/java/com/saturn/remote/
       - name: Preserve resources and metadata
         run: |
           for role in Host Viewer; do
@@ -48,9 +47,9 @@ jobs:
           cat > recovered/README.md <<'EOF'
           # Jenyok 1.5.77 recovered source
           
-          Host and Viewer contain the same application JAR; the launch config selects com.saturn.remote.HostApp or com.saturn.remote.ViewerApp.
+          Host and Viewer contain the same application JAR; the launch configuration selects com.saturn.remote.HostApp or com.saturn.remote.ViewerApp.
           
-          The original program was compiled from Kotlin. CFR produces Java source from JVM bytecode, not the original Kotlin source. Original formatting, comments, some names and Kotlin syntax cannot be recovered exactly. Treat the decompiled Java as a reconstruction and review CFR warnings.
+          The original program was compiled from Kotlin. Vineflower reconstructs Java source from JVM bytecode, not the original Kotlin source. Comments, formatting, some names, and Kotlin-specific syntax cannot be recovered exactly. The source should be reviewed and compile-tested before modification.
           
           Original application JARs are preserved under binaries/.
           EOF
@@ -58,14 +57,14 @@ jobs:
           printf '# Viewer\nEntry point: com.saturn.remote.ViewerApp\nVersion: 1.5.77\n' > recovered/Viewer/README.md
       - name: Package recovered source
         run: |
-          cd recovered && zip -qr ../Jenyok-1.5.77-recovered-source.zip . && cd ..
+          cd recovered && zip -qr ../Jenyok-1.5.77-recovered-vineflower.zip . && cd ..
           find recovered -type f | sort > recovered-file-list.txt
-          echo "Java files: $(find recovered/Host/src/main/java recovered/Viewer/src/main/java -type f -name '*.java' | wc -l)"
+          echo "Java files: $(find recovered/Host/src/main/java -type f -name '*.java' | wc -l)"
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Jenyok-1.5.77-recovered-source
+          name: Jenyok-1.5.77-recovered-vineflower
           path: |
-            Jenyok-1.5.77-recovered-source.zip
+            Jenyok-1.5.77-recovered-vineflower.zip
             recovered-file-list.txt
           retention-days: 30
