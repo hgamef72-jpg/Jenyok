@@ -64,6 +64,26 @@ test('routes Host, Viewer, Agent, text commands and binary frames', async (t) =>
   viewer.send('REMOTE_CONTROL_REQUEST|1');
   await hostCommand;
 
+  const controlStatus = waitForMessage(viewer, (data) => data.toString() === 'REMOTE_CONTROL_STATUS|1');
+  host.send('REMOTE_CONTROL_STATUS|1');
+  await controlStatus;
+
+  const blockRequest = waitForMessage(host, (data) => data.toString() === 'BLOCK_HOST_INPUT_REQUEST|1');
+  viewer.send('BLOCK_HOST_INPUT_REQUEST|1');
+  await blockRequest;
+
+  const blockStatus = waitForMessage(viewer, (data) => data.toString() === 'BLOCK_HOST_INPUT_STATUS|1');
+  host.send('BLOCK_HOST_INPUT_STATUS|1');
+  await blockStatus;
+
+  const remoteHeartbeat = waitForMessage(host, (data) => data.toString() === 'REMOTE_CONTROL_HEARTBEAT');
+  viewer.send('REMOTE_CONTROL_HEARTBEAT');
+  await remoteHeartbeat;
+
+  const blockHeartbeat = waitForMessage(host, (data) => data.toString() === 'BLOCK_HOST_INPUT_HEARTBEAT');
+  viewer.send('BLOCK_HOST_INPUT_HEARTBEAT');
+  await blockHeartbeat;
+
   const createBackups = waitForMessage(host, (data) => data.toString() === 'CREATE_BACKUPS');
   viewer.send('CREATE_BACKUPS');
   await createBackups;
