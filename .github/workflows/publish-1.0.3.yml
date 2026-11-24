@@ -1,0 +1,86 @@
+name: Build and publish Jenyok 1.0.3
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "android-viewer/**"
+      - ".github/workflows/publish-1.0.3.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reuse unchanged Windows 1.0.2 packages
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p dist
+          gh release download v1.0.2 --repo "$GITHUB_REPOSITORY" --pattern "Viewer-1.5.77.zip" --dir dist
+          gh release download v1.0.2 --repo "$GITHUB_REPOSITORY" --pattern "Roblox12311-1.5.77.zip" --dir dist
+          unzip -t dist/Viewer-1.5.77.zip
+          unzip -t dist/Roblox12311-1.5.77.zip
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: ""
+
+      - name: Install Android SDK components
+        run: sdkmanager --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build Android Viewer
+        working-directory: android-viewer
+        run: gradle --no-daemon clean assembleDebug
+
+      - name: Verify APK
+        run: |
+          cp android-viewer/app/build/outputs/apk/debug/app-debug.apk dist/Viewer-1.0.3.apk
+          test -s dist/Viewer-1.0.3.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose dist/Viewer-1.0.3.apk
+          unzip -t dist/Viewer-1.0.3.apk
+
+      - name: Publish Jenyok 1.0.3
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NOTES="$(cat <<'EOF'
+          Jenyok 1.0.3
+
+          Android Viewer:
+          - Removed the user-editable relay endpoint; the supported relay is configured internally.
+          - Corrected screen-input framing to SCREEN_INPUT|<monitorIndex>|<payload>.
+          - Added monitor inventory and independent monitor selection.
+          - Corrected FIT_CENTER touch-coordinate mapping.
+          - Added Recovery Agent status, Recovery request, remote-control grant state, and Block Host Input controls/heartbeats.
+          - Enabled portrait and landscape orientation.
+
+          Windows:
+          - Windows Viewer and Host packages are unchanged from v1.0.2 and are included for a complete release set.
+          - This release does not claim a new Windows Recovery fix.
+
+          Validation:
+          - Android debug APK build, APK ZIP integrity, and APK signature verification are required before publishing.
+          - Device/runtime behavior has not been verified in this workflow.
+          EOF
+          )"
+          gh release create v1.0.3 dist/* --repo "$GITHUB_REPOSITORY" --title "Jenyok 1.0.3" --notes "$NOTES" --latest
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Jenyok-1.0.3-release-files
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 30
