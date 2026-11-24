@@ -55,7 +55,7 @@ test('routes Host, Viewer, Agent, text commands and binary frames', async (t) =>
   host.send('HOST_SESSION_STATUS|1');
   agent.send('HOST_AGENT_READY|1');
   viewer.send('GET_HOST_LIST');
-  const info = await waitForMessage(viewer, (data) => data.toString().startsWith('HOST_INFO|'));
+  const info = await waitForMessage(viewer, (data) => data.toString() === 'HOST_INFO|host-1|VGVzdCBQQw|2|1|1');
   assert.equal(info.data.toString(), 'HOST_INFO|host-1|VGVzdCBQQw|2|1|1');
 
   viewer.send('SELECT_HOST|host-1');
