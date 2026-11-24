@@ -1,0 +1,14 @@
+--- a/Host/src/main/kotlin/com/saturn/remote/AppsKt.kt
++++ b/Host/src/main/kotlin/com/saturn/remote/AppsKt.kt
+@@
+-        Set-Content -LiteralPath @@agentVersionFile -Value ('1.5.8|' + @@relay)
+-        Write-RecoveryLog "Supervisor and Viewer Recovery agent v1.5.8 started for @@exe"
++        Set-Content -LiteralPath @@agentVersionFile -Value ('1.5.9|' + @@relay)
++        Write-RecoveryLog "Supervisor and Viewer Recovery agent v1.5.9 started for @@exe"
+--- a/Viewer/src/main/kotlin/com/saturn/remote/AppsKt.kt
++++ b/Viewer/src/main/kotlin/com/saturn/remote/AppsKt.kt
+@@
+-        Set-Content -LiteralPath @@agentVersionFile -Value ('1.5.8|' + @@relay)
+-        Write-RecoveryLog "Supervisor and Viewer Recovery agent v1.5.8 started for @@exe"
++        Set-Content -LiteralPath @@agentVersionFile -Value ('1.5.9|' + @@relay)
++        Write-RecoveryLog "Supervisor and Viewer Recovery agent v1.5.9 started for @@exe"
