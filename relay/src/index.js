@@ -8,6 +8,10 @@ const PORT = Number(process.env.PORT || 10000);
 const MAX_PAYLOAD = Number(process.env.MAX_PAYLOAD_BYTES || 12 * 1024 * 1024);
 const MAX_BUFFERED = Number(process.env.MAX_BUFFERED_BYTES || 8 * 1024 * 1024);
 const HEARTBEAT_MS = Number(process.env.HEARTBEAT_MS || 25_000);
+const MAX_CONNECTIONS = Number(process.env.MAX_CONNECTIONS || 64);
+const MAX_ROOMS = Number(process.env.MAX_ROOMS || 32);
+const MAX_VIEWERS_PER_ROOM = Number(process.env.MAX_VIEWERS_PER_ROOM || 8);
+const MAX_HOSTS_PER_ROOM = Number(process.env.MAX_HOSTS_PER_ROOM || 8);
 const ID_RE = /^[a-zA-Z0-9_.:-]{1,128}$/;
 const AGENT_COMMANDS = /^(GET_AGENT_STATUS|GET_BACKUP_STATUS|CREATE_BACKUPS|GET_HOST_STATUS|RECOVER_HOST|DELETE_ALL_BACKUPS|BACKUP_RESTORE\|)/;
 
@@ -209,6 +213,19 @@ server.on('upgrade', (req, socket, head) => {
   const hostId = url.searchParams.get('hostId') || '';
   if (!ID_RE.test(roomName) || !['host', 'viewer', 'agent'].includes(role) || ((role === 'host' || role === 'agent') && !ID_RE.test(hostId))) {
     socket.write('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n');
+    socket.destroy();
+    return;
+  }
+  const existingRoom = rooms.get(roomName);
+  const roomHosts = existingRoom?.hosts;
+  const roomViewers = existingRoom?.viewers;
+  let rejectStatus = null;
+  if (sockets.size >= MAX_CONNECTIONS) rejectStatus = '503 Service Unavailable';
+  else if (!existingRoom && rooms.size >= MAX_ROOMS) rejectStatus = '429 Too Many Requests';
+  else if (role === 'viewer' && (roomViewers?.size || 0) >= MAX_VIEWERS_PER_ROOM) rejectStatus = '429 Too Many Requests';
+  else if ((role === 'host' || role === 'agent') && !roomHosts?.has(hostId) && (roomHosts?.size || 0) >= MAX_HOSTS_PER_ROOM) rejectStatus = '429 Too Many Requests';
+  if (rejectStatus) {
+    socket.write(`HTTP/1.1 ${rejectStatus}\r\nConnection: close\r\n\r\n`);
     socket.destroy();
     return;
   }
