@@ -76,6 +76,10 @@ test('routes Host, Viewer, Agent, text commands and binary frames', async (t) =>
   viewer.send('DELETE_ALL_BACKUPS');
   await deleteBackups;
 
+  const hostOfflineStatus = waitForMessage(viewer, (data) => data.toString() === 'HOST_SESSION_STATUS|0');
+  host.send('HOST_SESSION_STATUS|0');
+  await hostOfflineStatus;
+
   const restoreBackup = waitForMessage(host, (data) => data.toString() === 'BACKUP_RESTORE|1');
   viewer.send('BACKUP_RESTORE|1');
   await restoreBackup;
