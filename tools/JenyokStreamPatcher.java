@@ -62,13 +62,6 @@ public final class JenyokStreamPatcher {
         }
         if (indexConst == null) throw new IllegalStateException("Monitor index initialization pattern changed");
         AbstractInsnNode storeIndex = nextReal(indexConst);
-        InsnList selectedIndex = new InsnList();
-        selectedIndex.add(new VarInsnNode(Opcodes.ALOAD, 1));
-        selectedIndex.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL,
-                "com/saturn/remote/HostState", "getSelectedScreenIndex", "()I", false));
-        selectedIndex.add(new VarInsnNode(Opcodes.ISTORE, 9));
-        replace(indexConst, storeIndex, selectedIndex, method.instructions);
-
         AbstractInsnNode loopConst = null;
         for (AbstractInsnNode n = storeIndex.getNext(); n != null; n = n.getNext()) {
             if (n.getOpcode() == Opcodes.ISTORE && n instanceof VarInsnNode v && v.var == 10) {
@@ -80,30 +73,41 @@ public final class JenyokStreamPatcher {
         }
         if (loopConst == null) throw new IllegalStateException("Monitor cursor initialization pattern changed");
         AbstractInsnNode storeCursor = nextReal(loopConst);
+
+        AbstractInsnNode arrayLoad = null, arrayLength = null, boundStore = null;
+        for (AbstractInsnNode n = storeCursor.getNext(); n != null; n = n.getNext()) {
+            if (n instanceof VarInsnNode v && v.getOpcode() == Opcodes.ALOAD && v.var == 7) {
+                AbstractInsnNode length = nextReal(n);
+                AbstractInsnNode store = nextReal(length);
+                if (length != null && length.getOpcode() == Opcodes.ARRAYLENGTH &&
+                    store instanceof VarInsnNode b && b.getOpcode() == Opcodes.ISTORE && b.var == 11) {
+                    arrayLoad = n; arrayLength = length; boundStore = store; break;
+                }
+            }
+        }
+        if (arrayLoad == null) throw new IllegalStateException("Monitor loop bound pattern changed");
+
+        InsnList selectedIndex = new InsnList();
+        selectedIndex.add(new VarInsnNode(Opcodes.ALOAD, 1));
+        selectedIndex.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL,
+                "com/saturn/remote/HostState", "getSelectedScreenIndex", "()I", false));
+        selectedIndex.add(new VarInsnNode(Opcodes.ISTORE, 9));
+        replace(indexConst, storeIndex, selectedIndex, method.instructions);
+
         InsnList cursor = new InsnList();
         cursor.add(new VarInsnNode(Opcodes.ILOAD, 9));
         cursor.add(new VarInsnNode(Opcodes.ISTORE, 10));
         replace(loopConst, storeCursor, cursor, method.instructions);
 
-        AbstractInsnNode arrayLoad = null;
-        for (AbstractInsnNode n = storeCursor.getNext(); n != null; n = n.getNext()) {
-            if (n instanceof VarInsnNode v && v.getOpcode() == Opcodes.ALOAD && v.var == 7) {
-                AbstractInsnNode arrayLength = nextReal(n);
-                AbstractInsnNode boundStore = nextReal(arrayLength);
-                if (arrayLength != null && arrayLength.getOpcode() == Opcodes.ARRAYLENGTH &&
-                    boundStore instanceof VarInsnNode b && b.getOpcode() == Opcodes.ISTORE && b.var == 11) {
-                    arrayLoad = n;
-                    InsnList bound = new InsnList();
-                    bound.add(new VarInsnNode(Opcodes.ILOAD, 9));
-                    bound.add(new InsnNode(Opcodes.ICONST_1));
-                    bound.add(new InsnNode(Opcodes.IADD));
-                    bound.add(new VarInsnNode(Opcodes.ISTORE, 11));
-                    replace(arrayLoad, boundStore, bound, method.instructions);
-                    break;
-                }
-            }
-        }
-        if (arrayLoad == null) throw new IllegalStateException("Monitor loop bound pattern changed");
+        InsnList bound = new InsnList();
+        bound.add(new VarInsnNode(Opcodes.ILOAD, 9));
+        bound.add(new InsnNode(Opcodes.ICONST_1));
+        bound.add(new InsnNode(Opcodes.IADD));
+        bound.add(new VarInsnNode(Opcodes.ISTORE, 11));
+        method.instructions.insertBefore(arrayLoad, bound);
+        method.instructions.remove(arrayLoad);
+        method.instructions.remove(arrayLength);
+        method.instructions.remove(boundStore);
 
         int widthPatches = 0;
         for (AbstractInsnNode n = method.instructions.getFirst(); n != null; n = n.getNext()) {
