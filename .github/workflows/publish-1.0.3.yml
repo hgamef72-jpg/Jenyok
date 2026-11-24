@@ -2,11 +2,6 @@ name: Build and publish Jenyok 1.0.3
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - "android-viewer/**"
-      - ".github/workflows/publish-1.0.3.yml"
 
 permissions:
   contents: write
