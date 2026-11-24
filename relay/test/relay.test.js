@@ -32,7 +32,7 @@ function connect(query) {
 test('routes Host, Viewer, Agent, text commands and binary frames', async (t) => {
   const child = spawn(process.execPath, ['src/index.js'], {
     cwd: __dirname + '/..',
-    env: { ...process.env, PORT: String(port), HEARTBEAT_MS: '1000', MAX_VIEWERS_PER_ROOM: '1' },
+    env: { ...process.env, PORT: String(port), HEARTBEAT_MS: '1000', MAX_VIEWERS_PER_ROOM: '1', MAX_BUFFERED_BYTES: String(1024 * 1024), MAX_PAYLOAD_BYTES: String(4 * 1024 * 1024) },
     stdio: 'ignore',
   });
   t.after(() => { if (!child.killed) child.kill('SIGTERM'); });
@@ -118,7 +118,7 @@ test('routes Host, Viewer, Agent, text commands and binary frames', async (t) =>
   assert.deepEqual(Buffer.from((await receivedFrame).data), binary);
 
   const viewerClosed = new Promise((resolve) => viewer.once('close', (code) => resolve(code)));
-  host.send(Buffer.alloc(5 * 1024 * 1024));
+  host.send(Buffer.alloc(2 * 1024 * 1024));
   assert.equal(await viewerClosed, 1013);
   await new Promise((resolve) => setTimeout(resolve, 100));
 
