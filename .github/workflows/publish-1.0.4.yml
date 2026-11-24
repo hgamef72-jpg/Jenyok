@@ -91,7 +91,12 @@ jobs:
           - APK and archive checks run in CI; real-device streaming and Windows Recovery must be verified on the target machines.
           EOF
           )"
-          gh release create v1.0.5 dist/* --repo "$GITHUB_REPOSITORY" --title "Jenyok 1.0.5" --notes "$NOTES" --latest
+          if gh release view v1.0.5 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload v1.0.5 dist/* --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit v1.0.5 --repo "$GITHUB_REPOSITORY" --title "Jenyok 1.0.5" --notes "$NOTES" --latest
+          else
+            gh release create v1.0.5 dist/* --repo "$GITHUB_REPOSITORY" --title "Jenyok 1.0.5" --notes "$NOTES" --latest
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
