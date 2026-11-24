@@ -63,6 +63,7 @@ public final class MainActivity extends Activity {
                 send("GET_AGENT_STATUS");
                 send("GET_HOST_STATUS");
                 send("GET_SCREEN_SIZE");
+                send("START_STREAM");
                 if (remoteGranted) send("REMOTE_CONTROL_HEARTBEAT");
                 if (blockGranted) send("BLOCK_HOST_INPUT_HEARTBEAT");
             }
