@@ -120,6 +120,7 @@ test('routes Host, Viewer, Agent, text commands and binary frames', async (t) =>
   const viewerClosed = new Promise((resolve) => viewer.once('close', (code) => resolve(code)));
   host.send(Buffer.alloc(5 * 1024 * 1024));
   assert.equal(await viewerClosed, 1013);
+  await new Promise((resolve) => setTimeout(resolve, 100));
 
   const viewer2 = await connect('room=test-room&role=viewer');
   t.after(() => viewer2.close());
