@@ -12,6 +12,17 @@ on:
       - "tools/patch_windows_recovery.py"
       - "android-viewer/**"
       - ".github/workflows/build-1.0.12-candidate.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "relay/**"
+      - "tools/RelayEndpointPatcher.java"
+      - "tools/JenyokStreamPatcher.java"
+      - "tools/StreamPacer.java"
+      - "tools/FrameRenderer.java"
+      - "tools/patch_windows_recovery.py"
+      - "android-viewer/**"
+      - ".github/workflows/build-1.0.12-candidate.yml"
   workflow_dispatch:
 
 permissions:
