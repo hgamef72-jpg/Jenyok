@@ -1,3 +1,4 @@
+// 1.0.8: tolerate relay frame headers and locate JPEG SOI instead of guessing prefix fields.
 package com.jenyok.viewer;
 
 import android.app.Activity;
