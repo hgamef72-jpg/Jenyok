@@ -216,7 +216,11 @@ public final class MainActivity extends Activity {
         half2.leftMargin = dp(5); row1.addView(blockButton, half2);
         controls.addView(row1);
         recoveryButton = actionButton("⟳   HOST RECOVERY", 0xffffb45e, v -> {
-            if (agentReady) { send("RECOVER_HOST"); screenHint.setVisibility(View.VISIBLE); screenHint.setText("RECOVERY REQUEST SENT\nWaiting for Host restart…"); }
+            if (connected) {
+                send("RECOVER_HOST");
+                screenHint.setVisibility(View.VISIBLE);
+                screenHint.setText("RECOVERY REQUEST SENT\nWaiting for Host restart…");
+            }
         });
         LinearLayout.LayoutParams recLp = lp(-1, dp(44)); recLp.topMargin = dp(7);
         controls.addView(recoveryButton, recLp);
@@ -394,20 +398,24 @@ public final class MainActivity extends Activity {
 
     private void handleFrame(byte[] packet) {
         if(packet==null || packet.length<4)return;
-        int monitor=selectedMonitor, offset=0;
-        if(!(packet[0]==(byte)0xff && packet[1]==(byte)0xd8)) {
-            if(packet.length>=6) {
-                int candidate=ByteBuffer.wrap(packet,0,4).order(ByteOrder.BIG_ENDIAN).getInt();
-                if(candidate>=0 && candidate<32) { monitor=candidate; offset=4; }
-            }
+        int monitor=selectedMonitor;
+        int jpegStart=-1;
+
+        // Host frames are [4-byte big-endian monitor index][JPEG bytes].
+        // Also accept a plain JPEG and tolerate small relay framing prefixes.
+        if(packet.length>=6 && (packet[0]!=(byte)0xff || packet[1]!=(byte)0xd8)) {
+            int candidate=ByteBuffer.wrap(packet,0,4).order(ByteOrder.BIG_ENDIAN).getInt();
+            if(candidate>=0 && candidate<32) monitor=candidate;
         }
         if(monitor!=selectedMonitor)return;
-        int jpegStart=-1;
-        for(int i=offset;i<Math.min(packet.length-1,offset+32);i++) {
+        int scanLimit=Math.min(packet.length-1,64);
+        for(int i=0;i<scanLimit;i++) {
             if((packet[i]&0xff)==0xff && (packet[i+1]&0xff)==0xd8){jpegStart=i;break;}
         }
         if(jpegStart<0)return;
-        Bitmap bitmap=BitmapFactory.decodeByteArray(packet,jpegStart,packet.length-jpegStart);
+        BitmapFactory.Options options=new BitmapFactory.Options();
+        options.inPreferredConfig=Bitmap.Config.RGB_565;
+        Bitmap bitmap=BitmapFactory.decodeByteArray(packet,jpegStart,packet.length-jpegStart,options);
         if(bitmap==null)return;
         lastFrame=bitmap; receivedFrames++;
         final Bitmap frame=bitmap; final long count=receivedFrames;
@@ -450,7 +458,7 @@ public final class MainActivity extends Activity {
             blockButton.setEnabled(connected);
         }
         if(recoveryButton!=null) {
-            recoveryButton.setEnabled(connected&&agentReady);
+            recoveryButton.setEnabled(connected);
             recoveryButton.setText(agentReady?"⟳   HOST RECOVERY  READY":"⟳   HOST RECOVERY");
         }
     }
