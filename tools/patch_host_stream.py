@@ -6,7 +6,7 @@ import io, pathlib, struct, sys, zipfile
 APP_JAR = "app/saturn-pc-remote.jar"
 CLASS_PATH = "com/saturn/remote/HostApp.class"
 OLD_MS = 120
-NEW_MS = 33
+NEW_MS = 20
 
 class Reader:
     def __init__(self, data: bytes): self.data, self.p = data, 0
