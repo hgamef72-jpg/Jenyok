@@ -59,11 +59,9 @@ jobs:
           NOTES="$(cat <<'EOF'
           Jenyok 1.0.6
 
-          Windows Viewer / Recovery:
-          - Recovery is now enabled while the Viewer is connected, even if the Recovery Agent readiness response is delayed or missing.
-          - The Viewer Recovery action is available while connected; the host still reports whether recovery was accepted.
-          - This removes a UI/protocol deadlock; the Recovery Agent must still be running and reachable for the Host restart to complete.
-          - The embedded Agent package is retained from the source release; its runtime handshake is not asserted by this workflow.
+          Windows:
+          - Windows Viewer and Host packages are carried forward unchanged from v1.0.5.
+          - Recovery is not claimed as fixed in this release; the actual Host Agent recovery path still needs runtime diagnostics.
 
           Android Viewer:
           - Keeps the dark neon cyan/purple UI.
