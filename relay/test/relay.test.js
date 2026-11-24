@@ -32,7 +32,7 @@ function connect(query) {
 test('routes Host, Viewer, Agent, text commands and binary frames', async (t) => {
   const child = spawn(process.execPath, ['src/index.js'], {
     cwd: __dirname + '/..',
-    env: { ...process.env, PORT: String(port), HEARTBEAT_MS: '1000' },
+    env: { ...process.env, PORT: String(port), HEARTBEAT_MS: '1000', MAX_VIEWERS_PER_ROOM: '1' },
     stdio: 'ignore',
   });
   t.after(() => { if (!child.killed) child.kill('SIGTERM'); });
@@ -49,6 +49,7 @@ test('routes Host, Viewer, Agent, text commands and binary frames', async (t) =>
   const agent = await connect('room=test-room&role=agent&hostId=host-1');
   const viewer = await connect('room=test-room&role=viewer');
   t.after(() => { host.close(); agent.close(); viewer.close(); });
+  await assert.rejects(connect('room=test-room&role=viewer'), /Unexpected server response: 429/);
 
   host.send('HOST_IDENTITY|Test PC|Host.exe');
   host.send('SCREEN_COUNT|2');
