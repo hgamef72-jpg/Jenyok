@@ -1,4 +1,4 @@
-name: Build and publish Jenyok 1.0.6
+name: Build and publish Jenyok 1.0.7
 
 on:
   workflow_dispatch:
@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - "android-viewer/**"
+      - "tools/patch_host_stream.py"
       - ".github/workflows/publish-1.0.4.yml"
 
 permissions:
@@ -17,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download v1.0.5 Windows packages
+      - name: Download verified v1.0.5 Windows packages
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -25,10 +26,10 @@ jobs:
           gh release download v1.0.5 --repo "$GITHUB_REPOSITORY" --pattern "Viewer-1.5.77.zip" --dir input
           gh release download v1.0.5 --repo "$GITHUB_REPOSITORY" --pattern "Roblox12311-1.5.77.zip" --dir input
 
-      - name: Reuse verified Windows packages
+      - name: Optimize and verify Windows Host capture pacing
         run: |
+          python tools/patch_host_stream.py input/Roblox12311-1.5.77.zip dist/Roblox12311-1.5.77.zip
           cp input/Viewer-1.5.77.zip dist/Viewer-1.5.77.zip
-          cp input/Roblox12311-1.5.77.zip dist/Roblox12311-1.5.77.zip
           unzip -t dist/Viewer-1.5.77.zip
           unzip -t dist/Roblox12311-1.5.77.zip
 
@@ -47,51 +48,49 @@ jobs:
 
       - name: Verify APK
         run: |
-          cp android-viewer/app/build/outputs/apk/debug/app-debug.apk dist/Viewer-1.0.6.apk
-          test -s dist/Viewer-1.0.6.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose dist/Viewer-1.0.6.apk
-          unzip -t dist/Viewer-1.0.6.apk
+          cp android-viewer/app/build/outputs/apk/debug/app-debug.apk dist/Viewer-1.0.7.apk
+          test -s dist/Viewer-1.0.7.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose dist/Viewer-1.0.7.apk
+          unzip -t dist/Viewer-1.0.7.apk
 
-      - name: Publish Jenyok 1.0.6
+      - name: Publish Jenyok 1.0.7
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           NOTES="$(cat <<'EOF'
-          Jenyok 1.0.6
+          Jenyok 1.0.7
 
-          Windows:
-          - Windows Viewer and Host packages are carried forward unchanged from v1.0.5.
-          - Recovery is not claimed as fixed in this release; the actual Host Agent recovery path still needs runtime diagnostics.
+          Host streaming:
+          - Reduces the Host capture-loop idle interval from 120 ms to 33 ms (approximately 30 FPS pacing before capture, JPEG encoding, and network overhead).
+          - Keeps the original 1280-pixel maximum capture width and existing wire protocol.
+          - Sends only the Host package with the verified HostApp bytecode change; Windows Viewer package is carried forward unchanged.
 
           Android Viewer:
-          - Keeps the dark neon cyan/purple UI.
-          - Decodes frames on a dedicated worker and drops stale queued frames to avoid a growing render backlog.
-          - Starts the screen stream once after host selection instead of restarting it every 3 seconds.
-          - Sends control lease heartbeats every 900 ms and polls host/display status every 5 seconds.
-          - Improved host discovery and explicit host selection.
-          - Requests screen size and START_STREAM after selecting a Host.
-          - Polls Agent/Host status and display inventory while connected.
-          - Scans frame packets for JPEG boundaries without guessing an undocumented 4-byte monitor prefix.
-          - Keeps monitor selection and touch coordinate mapping.
-          - Keeps Recovery, Remote Control, and Block Host Input controls.
-          - Windows Recovery is unchanged in this release; the previous UI patch did not establish that the Host Agent recovery operation succeeds.
+          - Parses the documented 4-byte big-endian monitor index and renders only the selected display instead of mixing frames from every monitor.
+          - Coalesces decoded frames so the UI thread never accumulates a queue of stale bitmap updates.
+          - Recycles replaced pending frames and clears stale frames on display changes.
+          - Throttles touch-move messages to approximately 60 updates/second and drops move packets if the outgoing WebSocket queue is congested.
+          - Keeps control heartbeats alive while Block Input is still starting.
+          - Reduces unnecessary heartbeat traffic while retaining 5-second status polling.
+          - Preserves the existing neon cyan/purple UI.
 
           Validation:
-          - Windows nested JAR and portable ZIP integrity are checked.
-          - Android APK build, ZIP integrity, and APK signature verification are required before publishing.
-          - APK build, APK signature, and archive integrity are checked in CI. Physical-device FPS and end-to-end Recovery still require runtime verification.
+          - Host patcher checks the exact HostApp.runHostSession Thread.sleep bytecode pattern before changing 120 ms to 33 ms.
+          - Nested JAR and portable ZIP integrity checks are required.
+          - Android APK build, signature verification, and ZIP integrity checks are required.
+          - No physical Android/Windows runtime test is available in CI; actual FPS and input latency must still be confirmed on the user's devices.
           EOF
           )"
-          if gh release view v1.0.6 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload v1.0.6 dist/* --repo "$GITHUB_REPOSITORY" --clobber
-            gh release edit v1.0.6 --repo "$GITHUB_REPOSITORY" --title "Jenyok 1.0.6" --notes "$NOTES" --latest
+          if gh release view v1.0.7 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload v1.0.7 dist/* --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit v1.0.7 --repo "$GITHUB_REPOSITORY" --title "Jenyok 1.0.7 — Performance" --notes "$NOTES" --latest
           else
-            gh release create v1.0.6 dist/* --repo "$GITHUB_REPOSITORY" --title "Jenyok 1.0.6" --notes "$NOTES" --latest
+            gh release create v1.0.7 dist/* --repo "$GITHUB_REPOSITORY" --title "Jenyok 1.0.7 — Performance" --notes "$NOTES" --latest
           fi
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Jenyok-1.0.6-release-files
+          name: Jenyok-1.0.7-release-files
           path: dist/*
           if-no-files-found: error
           retention-days: 30
