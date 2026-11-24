@@ -5,10 +5,10 @@ const { URL } = require('node:url');
 const WebSocket = require('ws');
 
 const PORT = Number(process.env.PORT || 10000);
-const MAX_PAYLOAD = Number(process.env.MAX_PAYLOAD_BYTES || 8 * 1024 * 1024);
+const MAX_PAYLOAD = Number(process.env.MAX_PAYLOAD_BYTES || 4 * 1024 * 1024);
 const MAX_BUFFERED = Number(process.env.MAX_BUFFERED_BYTES || 4 * 1024 * 1024);
 const HEARTBEAT_MS = Number(process.env.HEARTBEAT_MS || 25_000);
-const MAX_CONNECTIONS = Number(process.env.MAX_CONNECTIONS || 64);
+const MAX_CONNECTIONS = Number(process.env.MAX_CONNECTIONS || 32);
 const MAX_ROOMS = Number(process.env.MAX_ROOMS || 32);
 const MAX_VIEWERS_PER_ROOM = Number(process.env.MAX_VIEWERS_PER_ROOM || 8);
 const MAX_HOSTS_PER_ROOM = Number(process.env.MAX_HOSTS_PER_ROOM || 8);
