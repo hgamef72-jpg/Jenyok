@@ -47,6 +47,7 @@ public final class RelayEndpointPatcher {
         method.instructions.add(new InsnNode(Opcodes.ICONST_0));
         method.instructions.add(new InsnNode(Opcodes.IRETURN));
         method.instructions.add(matched);
+        method.instructions.add(new FrameNode(Opcodes.F_SAME, 0, null, 0, null));
         method.instructions.add(new InsnNode(Opcodes.ICONST_1));
         method.instructions.add(new InsnNode(Opcodes.IRETURN));
         method.maxStack = 2;
