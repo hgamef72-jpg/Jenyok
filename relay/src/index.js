@@ -223,6 +223,7 @@ server.on('upgrade', (req, socket, head) => {
     if (role === 'host' || role === 'agent') {
       const host = getHostRecord(ws.roomState, hostId);
       host.roomName = roomName;
+      host.roomState = ws.roomState;
       if (role === 'host') {
         if (host.ws && host.ws !== ws) host.ws.close(4001, 'Host reconnected');
         host.ws = ws;
