@@ -39,7 +39,11 @@ public final class RelayEndpointPatcher {
         };
         for (String marker : markers) {
           method.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
-          method.instructions.add(new LdcInsnNode(marker));
+          method.instructions.add(new FieldInsnNode(Opcodes.GETSTATIC,
+              "java/util/Locale", "ROOT", "Ljava/util/Locale;"));
+          method.instructions.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL,
+              "java/lang/String", "toLowerCase", "(Ljava/util/Locale;)Ljava/lang/String;", false));
+          method.instructions.add(new LdcInsnNode(marker.toLowerCase(Locale.ROOT)));
           method.instructions.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL,
               "java/lang/String", "contains", "(Ljava/lang/CharSequence;)Z", false));
           method.instructions.add(new JumpInsnNode(Opcodes.IFNE, matched));
