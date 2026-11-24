@@ -20,10 +20,10 @@ public final class PatchWindowsPackage {
     if (className.equals(VIEWER)) {
       changed += forceAgentGate(cn, "mainContent$lambda$32$lambda$31");
       changed += forceAgentGate(cn, "mainContent$lambda$36$lambda$35");
-      changed += forceAgentGate(cn, "onText$lambda$36");
-      changed += forceAgentGate(cn, "onText$lambda$37");
       changed += forceEnabledOnSetEnabled(cn, "rebuildRemoteScreenTabs$lambda$69$lambda$68$lambda$67");
     } else if (className.equals(CONNECT)) {
+      changed += forceAgentGate(cn, "onText$lambda$36");
+      changed += forceAgentGate(cn, "onText$lambda$37");
       changed += forceEnabledOnSetEnabled(cn, "onOpen");
     }
     if (changed == 0) throw new IllegalStateException("No expected Recovery bytecode changed in " + className);
