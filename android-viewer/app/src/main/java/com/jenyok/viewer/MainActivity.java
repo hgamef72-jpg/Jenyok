@@ -430,10 +430,9 @@ public final class MainActivity extends Activity {
     }
 
     private void handleFrame(byte[] packet) {
-        // Host binary frames are: 4-byte big-endian display index + JPEG payload.
-        if (packet == null || packet.length < 8 || destroyed) return;
-        int monitorIndex = ByteBuffer.wrap(packet, 0, 4).order(ByteOrder.BIG_ENDIAN).getInt();
-        if (monitorIndex != selectedMonitor) return;
+        // Do not assume a binary header layout: the Host/relay framing is not
+        // guaranteed to expose a 4-byte monitor index to the Android client.
+        if (packet == null || packet.length < 4 || destroyed) return;
         pendingFrame.set(packet);
         scheduleFrameDecode();
     }
@@ -499,13 +498,21 @@ public final class MainActivity extends Activity {
     }
 
     private Bitmap decodeFrame(byte[] packet) {
-        if (packet.length < 8) return null;
-        int monitorIndex = ByteBuffer.wrap(packet, 0, 4).order(ByteOrder.BIG_ENDIAN).getInt();
-        if (monitorIndex != selectedMonitor) return null;
-        if ((packet[4] & 0xff) != 0xff || (packet[5] & 0xff) != 0xd8) return null;
+        if (packet == null || packet.length < 4) return null;
+        // Find the JPEG start marker inside the WebSocket binary message. This
+        // tolerates relay/host headers without guessing their undocumented layout.
+        int jpegStart = -1;
+        for (int i = 0; i < packet.length - 1; i++) {
+            if ((packet[i] & 0xff) == 0xff && (packet[i + 1] & 0xff) == 0xd8) {
+                jpegStart = i;
+                break;
+            }
+        }
+        if (jpegStart < 0 || packet.length - jpegStart < 4) return null;
         BitmapFactory.Options options = new BitmapFactory.Options();
         options.inPreferredConfig = Bitmap.Config.RGB_565;
-        return BitmapFactory.decodeByteArray(packet, 4, packet.length - 4, options);
+        options.inSampleSize = 1;
+        return BitmapFactory.decodeByteArray(packet, jpegStart, packet.length - jpegStart, options);
     }
 
     private void clearScreen(String message) {
