@@ -98,7 +98,7 @@ def edit_method(data, name, nops=(), values=()):
     for begin, end in nops:
         if begin < 0 or end > length or end < begin:
             raise ValueError(name + ": patch range exceeds method")
-        output[start + begin:start + end] = b"\\x00" * (end - begin)
+        output[start + begin:start + end] = b"\x00" * (end - begin)
     for offset, opcode in values:
         if offset >= length:
             raise ValueError(name + ": patch offset exceeds method")
@@ -123,7 +123,7 @@ def patch_power_semantics(data):
     patched_start, patched_length = [
         value for key, value in methods(patched).items() if key[0] == "pauseHostSession"
     ][0]
-    if patched[patched_start + 27:patched_start + 50] != b"\\x00" * 23:
+    if patched[patched_start + 27:patched_start + 50] != b"\x00" * 23:
         raise ValueError("Power shutdown patch verification failed")
     return patched
 
@@ -172,7 +172,7 @@ def patch_jar(data):
             raise ValueError("Recovery Agent version verification failed after repack")
         app_methods = methods(apps)
         pause = [value for key, value in app_methods.items() if key[0] == "pauseHostSession"]
-        if len(pause) != 1 or apps[pause[0][0] + 27:pause[0][0] + 50] != b"\\x00" * 23:
+        if len(pause) != 1 or apps[pause[0][0] + 27:pause[0][0] + 50] != b"\x00" * 23:
             raise ValueError("Power shutdown semantics verification failed")
         methods(check.read(VIEWER_CLASS))
         methods(check.read(CONNECT_CLASS))
