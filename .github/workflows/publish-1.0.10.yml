@@ -2,16 +2,6 @@ name: Build and publish Jenyok 1.0.10
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - "android-viewer/**"
-      - "tools/JenyokStreamPatcher.java"
-      - "tools/StreamPacer.java"
-      - "tools/FrameRenderer.java"
-      - "tools/patch_windows_recovery.py"
-      - ".github/workflows/publish-1.0.10.yml"
-
 permissions:
   contents: write
 
