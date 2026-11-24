@@ -53,10 +53,10 @@ test('routes Host, Viewer, Agent, text commands and binary frames', async (t) =>
 
   host.send('HOST_IDENTITY|Test PC|Host.exe');
   host.send('SCREEN_COUNT|2');
-  host.send('HOST_SESSION_STATUS|1');
+  host.send('HOST_SESSION_STATUS|0');
   agent.send('HOST_AGENT_READY|1');
   viewer.send('GET_HOST_LIST');
-  const info = await waitForMessage(viewer, (data) => data.toString() === 'HOST_INFO|host-1|VGVzdCBQQw|2|1|1');
+  const info = await waitForMessage(viewer, (data) => data.toString() === 'HOST_INFO|host-1|VGVzdCBQQw|2|0|1');
   assert.equal(info.data.toString(), 'HOST_INFO|host-1|VGVzdCBQQw|2|1|1');
 
   viewer.send('SELECT_HOST|host-1');
