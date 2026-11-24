@@ -1,0 +1,149 @@
+name: Build Jenyok 1.0.12 candidate
+
+on:
+  push:
+    branches: [main, "rebuild/**"]
+    paths:
+      - "relay/**"
+      - "tools/RelayEndpointPatcher.java"
+      - "tools/JenyokStreamPatcher.java"
+      - "tools/StreamPacer.java"
+      - "tools/FrameRenderer.java"
+      - "tools/patch_windows_recovery.py"
+      - "android-viewer/**"
+      - ".github/workflows/build-1.0.12-candidate.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "relay/**"
+      - "tools/RelayEndpointPatcher.java"
+      - "tools/JenyokStreamPatcher.java"
+      - "tools/StreamPacer.java"
+      - "tools/FrameRenderer.java"
+      - "tools/patch_windows_recovery.py"
+      - "android-viewer/**"
+      - ".github/workflows/build-1.0.12-candidate.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-candidate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download baseline Windows packages
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p input dist tools/classes
+          gh release download v1.0.5 --repo "$GITHUB_REPOSITORY" --pattern "Viewer-1.5.77.zip" --dir input
+          gh release download v1.0.5 --repo "$GITHUB_REPOSITORY" --pattern "Roblox12311-1.5.77.zip" --dir input
+
+      - name: Prepare ASM and compile patchers
+        run: |
+          curl -fsSL https://repo.maven.apache.org/maven2/org/ow2/asm/asm/9.7.1/asm-9.7.1.jar -o input/asm.jar
+          curl -fsSL https://repo.maven.apache.org/maven2/org/ow2/asm/asm-tree/9.7.1/asm-tree-9.7.1.jar -o input/asm-tree.jar
+          unzip -p input/Viewer-1.5.77.zip app/saturn-pc-remote.jar > input/viewer-app.jar
+          javac --release 17 -cp "input/asm.jar:input/asm-tree.jar:input/viewer-app.jar" -d tools/classes \
+            tools/JenyokStreamPatcher.java tools/StreamPacer.java tools/FrameRenderer.java tools/RelayEndpointPatcher.java
+
+      - name: Patch Host stream, Recovery and relay endpoint
+        run: |
+          java -cp "tools/classes:input/asm.jar:input/asm-tree.jar" JenyokStreamPatcher \
+            host input/Roblox12311-1.5.77.zip dist/host-stream.zip \
+            tools/classes/com/saturn/remote/StreamPacer.class
+          python tools/patch_windows_recovery.py dist/host-stream.zip dist/host-recovery.zip
+          java -cp "tools/classes:input/asm.jar:input/asm-tree.jar" RelayEndpointPatcher \
+            dist/host-recovery.zip dist/Roblox12311-1.5.77.zip \
+            wss://jenyok-relay-rebuilt.onrender.com/connect
+
+      - name: Patch Windows Viewer stream and relay endpoint
+        run: |
+          java -cp "tools/classes:input/asm.jar:input/asm-tree.jar" JenyokStreamPatcher \
+            viewer input/Viewer-1.5.77.zip dist/viewer-stream.zip \
+            tools/classes/com/saturn/remote/FrameRenderer.class
+          java -cp "tools/classes:input/asm.jar:input/asm-tree.jar" RelayEndpointPatcher \
+            dist/viewer-stream.zip dist/Viewer-1.5.77.zip \
+            wss://jenyok-relay-rebuilt.onrender.com/connect
+          unzip -t dist/Roblox12311-1.5.77.zip
+          unzip -t dist/Viewer-1.5.77.zip
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: ""
+
+      - name: Install Android SDK components
+        run: sdkmanager --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build Android Viewer 1.0.12
+        working-directory: android-viewer
+        run: gradle --no-daemon clean assembleDebug
+
+      - name: Verify Android APK
+        run: |
+          cp android-viewer/app/build/outputs/apk/debug/app-debug.apk dist/Viewer-1.0.12.apk
+          test -s dist/Viewer-1.0.12.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose dist/Viewer-1.0.12.apk
+          unzip -t dist/Viewer-1.0.12.apk
+
+      - name: Smoke test deployed Relay health endpoint
+        run: |
+          for attempt in $(seq 1 24); do
+            response="$(curl -fsS https://jenyok-relay-rebuilt.onrender.com/healthz || true)"
+            if printf '%s' "$response" | grep -q '"ok":true'; then
+              printf '%s\n' "$response"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Relay health endpoint did not become ready"
+          exit 1
+
+      - name: Publish v1.0.12 release candidate
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="v1.0.12-rc1"
+          ASSETS=(dist/Roblox12311-1.5.77.zip dist/Viewer-1.5.77.zip dist/Viewer-1.0.12.apk)
+          NOTES="$(cat <<'EOF'
+          Jenyok 1.0.12 — Release Candidate 1
+
+          - Rebuilt the WebSocket Relay from the recovered Host, Viewer and Recovery Agent protocol.
+          - Added room/host/agent routing, binary screen-frame forwarding, heartbeat cleanup, bounded message sizes and slow-consumer backpressure.
+          - Migrated Android Viewer and Windows Host/Viewer packages to the new Relay endpoint:
+            wss://jenyok-relay-rebuilt.onrender.com/connect
+          - Preserved Windows Remote Control and Block Host Input request/status/heartbeat routing to the Host.
+          - Windows packages include the existing stream pacing/render patches and a migration fallback for saved settings that still point to the old Relay.
+          - Android Viewer version 1.0.12.
+
+          Validation:
+          - Relay integration tests passed in GitHub Actions.
+          - Windows Host and Viewer package patching and ZIP integrity checks passed.
+          - Android APK build, signature verification and ZIP integrity checks passed.
+          - Physical-device end-to-end testing has not yet been completed. This is a release candidate, not a final stable release.
+          EOF
+          )"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${ASSETS[@]}" --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --title "Jenyok 1.0.12 — Release Candidate 1" --notes "$NOTES" --prerelease
+          else
+            gh release create "$TAG" "${ASSETS[@]}" --repo "$GITHUB_REPOSITORY" --title "Jenyok 1.0.12 — Release Candidate 1" --notes "$NOTES" --prerelease
+          fi
+
+      - name: Upload candidate packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: Jenyok-1.0.12-candidate
+          path: |
+            dist/Roblox12311-1.5.77.zip
+            dist/Viewer-1.5.77.zip
+            dist/Viewer-1.0.12.apk
+          if-no-files-found: error
+          retention-days: 30

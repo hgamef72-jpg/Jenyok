@@ -1,0 +1,17 @@
+{
+  "name": "jenyok-relay",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Bounded-memory WebSocket relay for Jenyok Host and Viewer",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "ws": "^8.18.3"
+  }
+}

@@ -32,7 +32,7 @@ import java.util.concurrent.atomic.AtomicReference;
 /** Jenyok mobile Viewer. Uses the existing relay and Host wire protocol. */
 // CI release trigger: validate Android and patched Windows packages together.
 public final class MainActivity extends Activity {
-    private static final String RELAY = "wss://saturn-pc-remote-relay.onrender.com/connect";
+    private static final String RELAY = "wss://jenyok-relay-rebuilt.onrender.com/connect";
     private static final String ROOM = "saturn-pc-remote-public-room-v1";
     private static final int BG = 0xff070b18, PANEL = 0xff10182b, PANEL_2 = 0xff0b1325;
     private static final int CYAN = 0xff31e8ff, PURPLE = 0xffa879ff, TEXT = 0xffedf5ff, MUTED = 0xff8294b5;
