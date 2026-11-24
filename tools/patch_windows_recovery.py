@@ -69,15 +69,26 @@ def methods(data):
 
     def skip_members():
         nonlocal pos
-        for _ in range(u2()):
+        member_count = u2()
+        for member_index in range(member_count):
+            member_start = pos
+            if pos + 8 > len(b):
+                raise ValueError("Truncated class member header at offset %d" % pos)
             pos += 6
             attribute_count = u2()
-            for __ in range(attribute_count):
-                pos += 2
+            for attribute_index in range(attribute_count):
+                if pos + 6 > len(b):
+                    raise ValueError("Truncated member attribute header at offset %d" % pos)
+                attribute_name_index = u2()
                 attr_length = u4()
+                if attr_length > len(b) - pos:
+                    raise ValueError(
+                        "Invalid member attribute length %d at offset %d "
+                        "(member %d/%d, attribute %d/%d, name index %d, class size %d)"
+                        % (attr_length, pos, member_index + 1, member_count,
+                           attribute_index + 1, attribute_count, attribute_name_index, len(b))
+                    )
                 pos += attr_length
-            if pos > len(b):
-                raise ValueError("Class member attributes exceed class-file bounds")
 
     skip_members()
     result = {}
