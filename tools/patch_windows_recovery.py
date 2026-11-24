@@ -71,10 +71,13 @@ def methods(data):
         nonlocal pos
         for _ in range(u2()):
             pos += 6
-            for __ in range(u2()):
+            attribute_count = u2()
+            for __ in range(attribute_count):
                 pos += 2
                 attr_length = u4()
                 pos += attr_length
+            if pos > len(b):
+                raise ValueError("Class member attributes exceed class-file bounds")
 
     skip_members()
     result = {}
