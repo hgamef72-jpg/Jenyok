@@ -7,9 +7,8 @@ const http = require('node:http');
 
 const port = 19000 + Math.floor(Math.random() * 1000);
 const base = `ws://127.0.0.1:${port}`;
-let child;
 
-function waitForMessage(ws, predicate, timeout = 2500) {
+function waitForMessage(ws, predicate, timeout = 3000) {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('message timeout')), timeout);
     const onMessage = (data, binary) => {
@@ -30,13 +29,13 @@ function connect(query) {
   });
 }
 
-test('routes host discovery, text commands and binary frames', async (t) => {
-  child = spawn(process.execPath, ['src/index.js'], {
+test('routes Host, Viewer, Agent, text commands and binary frames', async (t) => {
+  const child = spawn(process.execPath, ['src/index.js'], {
     cwd: __dirname + '/..',
     env: { ...process.env, PORT: String(port), HEARTBEAT_MS: '1000' },
     stdio: 'ignore',
   });
-  t.after(() => { if (child && !child.killed) child.kill('SIGTERM'); });
+  t.after(() => { if (!child.killed) child.kill('SIGTERM'); });
   await new Promise((resolve, reject) => {
     const deadline = Date.now() + 5000;
     const poll = () => http.get(`http://127.0.0.1:${port}/healthz`, (res) => {
@@ -45,19 +44,29 @@ test('routes host discovery, text commands and binary frames', async (t) => {
     }).on('error', () => Date.now() < deadline ? setTimeout(poll, 100) : reject(new Error('server did not start')));
     poll();
   });
+
   const host = await connect('room=test-room&role=host&hostId=host-1');
+  const agent = await connect('room=test-room&role=agent&hostId=host-1');
   const viewer = await connect('room=test-room&role=viewer');
-  t.after(() => { host.close(); viewer.close(); });
+  t.after(() => { host.close(); agent.close(); viewer.close(); });
+
   host.send('HOST_IDENTITY|Test PC|Host.exe');
   host.send('SCREEN_COUNT|2');
   host.send('HOST_SESSION_STATUS|1');
+  agent.send('HOST_AGENT_READY|1');
   viewer.send('GET_HOST_LIST');
   const info = await waitForMessage(viewer, (data) => data.toString().startsWith('HOST_INFO|'));
-  assert.match(info.data.toString(), /^HOST_INFO\\|host-1\\|VGVzdCBQQw\\|2\\|0\\|1$/);
+  assert.equal(info.data.toString(), 'HOST_INFO|host-1|VGVzdCBQQw|2|1|1');
+
   viewer.send('SELECT_HOST|host-1');
-  const forwarded = waitForMessage(host, (data) => data.toString() === 'REMOTE_CONTROL_REQUEST|1');
+  const hostCommand = waitForMessage(host, (data) => data.toString() === 'REMOTE_CONTROL_REQUEST|1');
   viewer.send('REMOTE_CONTROL_REQUEST|1');
-  await forwarded;
+  await hostCommand;
+
+  const agentCommand = waitForMessage(agent, (data) => data.toString() === 'RECOVER_HOST');
+  viewer.send('RECOVER_HOST');
+  await agentCommand;
+
   const binary = Buffer.from([0xff, 0xd8, 0x01, 0x02, 0xff, 0xd9]);
   const receivedFrame = waitForMessage(viewer, (_data, isBinary) => isBinary);
   host.send(binary);
