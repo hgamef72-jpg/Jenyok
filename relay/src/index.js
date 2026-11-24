@@ -13,7 +13,7 @@ const MAX_ROOMS = Number(process.env.MAX_ROOMS || 32);
 const MAX_VIEWERS_PER_ROOM = Number(process.env.MAX_VIEWERS_PER_ROOM || 8);
 const MAX_HOSTS_PER_ROOM = Number(process.env.MAX_HOSTS_PER_ROOM || 8);
 const ID_RE = /^[a-zA-Z0-9_.:-]{1,128}$/;
-const AGENT_COMMANDS = /^(GET_AGENT_STATUS|GET_BACKUP_STATUS|GET_HOST_STATUS|RECOVER_HOST|DELETE_ALL_BACKUPS|BACKUP_RESTORE\|)/;
+const AGENT_COMMANDS = /^(GET_AGENT_STATUS|RECOVER_HOST)$/;
 
 const rooms = new Map();
 const sockets = new Set();
