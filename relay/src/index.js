@@ -29,7 +29,10 @@ function getRoom(name) {
 
 function safeSend(ws, data, options = {}) {
   if (!ws || ws.readyState !== WebSocket.OPEN) return false;
-  if (ws.bufferedAmount > MAX_BUFFERED) {
+  const outgoingBytes = typeof data === 'string'
+    ? Buffer.byteLength(data, 'utf8')
+    : Number(data?.byteLength ?? data?.length ?? 0);
+  if (ws.bufferedAmount + outgoingBytes > MAX_BUFFERED) {
     ws.close(1013, 'Receiver is too slow');
     return false;
   }
