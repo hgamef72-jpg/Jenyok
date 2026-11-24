@@ -4,6 +4,8 @@ import android.app.Activity;
 import android.graphics.BitmapFactory;
 import android.graphics.Bitmap;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
@@ -24,6 +26,15 @@ public final class MainActivity extends Activity {
     private String selectedHost = null;
     private int screenWidth = 1, screenHeight = 1;
     private boolean control = false;
+    private final Handler heartbeatHandler = new Handler(Looper.getMainLooper());
+    private final Runnable heartbeat = new Runnable() {
+        @Override public void run() {
+            if (control && socket != null) {
+                send("REMOTE_CONTROL_HEARTBEAT");
+                heartbeatHandler.postDelayed(this, 4000);
+            }
+        }
+    };
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -41,6 +52,8 @@ public final class MainActivity extends Activity {
         Button refresh = new Button(this); refresh.setText("Refresh"); refresh.setOnClickListener(v -> send("GET_HOST_LIST"));
         Button remote = new Button(this); remote.setText("Remote control"); remote.setOnClickListener(v -> {
             control = !control; send(control ? "REMOTE_CONTROL_REQUEST|1" : "REMOTE_CONTROL|0");
+            heartbeatHandler.removeCallbacks(heartbeat);
+            if (control) heartbeatHandler.postDelayed(heartbeat, 4000);
             remote.setText(control ? "Control: ON" : "Remote control");
         });
         actions.addView(refresh); actions.addView(remote); root.addView(actions);
@@ -110,5 +123,5 @@ public final class MainActivity extends Activity {
         return true;
     }
     private void send(String text) { WebSocket ws = socket; if (ws != null) ws.send(text); }
-    @Override protected void onDestroy() { if (socket != null) socket.close(1000, "App closed"); client.dispatcher().executorService().shutdown(); super.onDestroy(); }
+    @Override protected void onDestroy() { heartbeatHandler.removeCallbacks(heartbeat); if (socket != null) socket.close(1000, "App closed"); client.dispatcher().executorService().shutdown(); super.onDestroy(); }
 }
