@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Repair Recovery handshake, Power shutdown semantics and Viewer gating."""
+"""Repair Recovery Agent handshake and Power shutdown semantics without altering Viewer startup bytecode."""
 import io
 import os
 import struct
@@ -146,20 +146,10 @@ def patch_jar(data):
                     raise ValueError("Recovery Agent version verification failed")
                 payload = patch_power_semantics(payload)
                 seen.add("AppsKt")
-            elif info.filename == VIEWER_CLASS:
-                payload = edit_method(payload, "mainContent$lambda$32$lambda$31", nops=((7, 14),))
-                payload = edit_method(payload, "mainContent$lambda$36$lambda$35", nops=((111, 118),))
-                payload = edit_method(payload, "rebuildRemoteScreenTabs$lambda$69$lambda$68$lambda$67", values=((60, 0x04),))
-                seen.add("ViewerWindow")
-            elif info.filename == CONNECT_CLASS:
-                payload = edit_method(payload, "onOpen", values=((93, 0x04),))
-                payload = edit_method(payload, "onText$lambda$36", nops=((15, 22),))
-                payload = edit_method(payload, "onText$lambda$37", nops=((52, 59),))
-                seen.add("Connect")
             target.writestr(info, payload)
     source.close()
 
-    required = {"AppsKt", "ViewerWindow", "Connect"}
+    required = {"AppsKt"}
     if seen != required:
         raise ValueError("Expected patch targets %s, patched %s" % (required, seen))
 
@@ -174,8 +164,6 @@ def patch_jar(data):
         pause = [value for key, value in app_methods.items() if key[0] == "pauseHostSession"]
         if len(pause) != 1 or apps[pause[0][0] + 27:pause[0][0] + 50] != b"\x00" * 23:
             raise ValueError("Power shutdown semantics verification failed")
-        methods(check.read(VIEWER_CLASS))
-        methods(check.read(CONNECT_CLASS))
     return result
 
 
