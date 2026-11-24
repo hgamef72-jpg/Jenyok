@@ -47,19 +47,20 @@ public final class MainActivity extends Activity {
     private final AtomicReference<Bitmap> pendingBitmap = new AtomicReference<>();
     private final AtomicBoolean renderPosted = new AtomicBoolean(false);
     private volatile boolean destroyed;
-    private WebSocket socket;
+    private volatile WebSocket socket;
     private TextView status, hostName, frameInfo, screenHint;
     private Spinner hostPicker, monitorPicker;
     private ImageView screen;
     private Button connectButton, remoteButton, blockButton, recoveryButton;
     private final Map<String,HostInfo> hosts = new LinkedHashMap<>();
     private final Map<Integer,String> monitors = new LinkedHashMap<>();
-    private String selectedHost;
+    private volatile String selectedHost;
     private volatile int selectedMonitor, screenWidth = 1, screenHeight = 1;
     private long lastMoveSentNanos;
     private long lastHeartbeatSent;
-    private boolean connected, connectRequested, agentReady, remoteRequested, remoteGranted;
-    private boolean blockRequested, blockGranted, rebuildingHosts, rebuildingMonitors;
+    private volatile boolean connected, connectRequested, agentReady, remoteRequested, remoteGranted;
+    private volatile boolean blockRequested, blockGranted;
+    private boolean rebuildingHosts, rebuildingMonitors;
     private long receivedFrames;
     private long fpsWindowStart;
     private int fpsWindowFrames;
@@ -431,6 +432,8 @@ public final class MainActivity extends Activity {
     private void handleFrame(byte[] packet) {
         // Host binary frames are: 4-byte big-endian display index + JPEG payload.
         if (packet == null || packet.length < 8 || destroyed) return;
+        int monitorIndex = ByteBuffer.wrap(packet, 0, 4).order(ByteOrder.BIG_ENDIAN).getInt();
+        if (monitorIndex != selectedMonitor) return;
         pendingFrame.set(packet);
         scheduleFrameDecode();
     }
