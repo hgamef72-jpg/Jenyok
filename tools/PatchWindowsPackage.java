@@ -42,8 +42,13 @@ public final class PatchWindowsPackage {
     int n = 0;
     for (AbstractInsnNode insn = m.instructions.getFirst(); insn != null; ) {
       AbstractInsnNode next = insn.getNext();
-      if (insn instanceof FieldInsnNode f && f.getOpcode() == Opcodes.GETFIELD &&
-          f.name.equals("hostAgentAvailable") && f.desc.equals("Z")) {
+      boolean gate = insn instanceof FieldInsnNode f && f.getOpcode() == Opcodes.GETFIELD &&
+          f.name.equals("hostAgentAvailable") && f.desc.equals("Z");
+      gate = gate || (insn instanceof MethodInsnNode call &&
+          call.getOpcode() == Opcodes.INVOKESTATIC &&
+          call.name.equals("access$getHostAgentAvailable$p") &&
+          call.desc.equals("(Lcom/saturn/remote/ViewerWindow;)Z"));
+      if (gate) {
         InsnList replacement = new InsnList();
         replacement.add(new InsnNode(Opcodes.POP));
         replacement.add(new InsnNode(Opcodes.ICONST_1));
