@@ -1,4 +1,4 @@
-name: Build and publish Jenyok 1.0.4
+name: Build and publish Jenyok 1.0.5
 
 on:
   workflow_dispatch:
@@ -7,7 +7,7 @@ on:
     paths:
       - "android-viewer/**"
       - "tools/patch_windows_recovery.py"
-      - ".github/workflows/publish-1.0.4.yml"
+      - ".github/workflows/publish-1.0.5.yml"
 
 permissions:
   contents: write
@@ -53,44 +53,44 @@ jobs:
 
       - name: Verify APK
         run: |
-          cp android-viewer/app/build/outputs/apk/debug/app-debug.apk dist/Viewer-1.0.4.apk
-          test -s dist/Viewer-1.0.4.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose dist/Viewer-1.0.4.apk
-          unzip -t dist/Viewer-1.0.4.apk
+          cp android-viewer/app/build/outputs/apk/debug/app-debug.apk dist/Viewer-1.0.5.apk
+          test -s dist/Viewer-1.0.5.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose dist/Viewer-1.0.5.apk
+          unzip -t dist/Viewer-1.0.5.apk
 
-      - name: Publish Jenyok 1.0.4
+      - name: Publish Jenyok 1.0.5
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           NOTES="$(cat <<'EOF'
-          Jenyok 1.0.4
+          Jenyok 1.0.5
 
           Windows Viewer / Recovery:
           - Recovery is now enabled while the Viewer is connected, even if the Recovery Agent readiness response is delayed or missing.
-          - The Viewer sends RECOVER_HOST instead of permanently blocking the action behind the readiness flag.
+          - The Viewer Recovery action is available while connected; the host still reports whether recovery was accepted.
           - This removes a UI/protocol deadlock; the Recovery Agent must still be running and reachable for the Host restart to complete.
-          - The embedded Agent version handshake is verified as 1.5.9.
+          - The embedded Agent package is retained from the source release; its runtime handshake is not asserted by this workflow.
 
           Android Viewer:
           - Rebuilt the mobile UI with a dark neon cyan/purple visual style.
           - Improved host discovery and explicit host selection.
           - Requests screen size and START_STREAM after selecting a Host.
           - Polls Agent/Host status and display inventory while connected.
-          - Decodes both raw JPEG frames and monitor-index-prefixed JPEG frames.
+          - Scans binary frame payloads for JPEG boundaries and supports monitor-index prefixes in either byte order.
           - Keeps monitor selection and touch coordinate mapping.
           - Keeps Recovery, Remote Control, and Block Host Input controls.
 
           Validation:
           - Windows nested JAR and portable ZIP integrity are checked.
           - Android APK build, ZIP integrity, and APK signature verification are required before publishing.
-          - Physical-device and real Windows Recovery end-to-end tests are not available in this workflow.
+          - APK and archive checks run in CI; real-device streaming and Windows Recovery must be verified on the target machines.
           EOF
           )"
-          gh release create v1.0.4 dist/* --repo "$GITHUB_REPOSITORY" --title "Jenyok 1.0.4" --notes "$NOTES" --latest
+          gh release create v1.0.5 dist/* --repo "$GITHUB_REPOSITORY" --title "Jenyok 1.0.5" --notes "$NOTES" --latest
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Jenyok-1.0.4-release-files
+          name: Jenyok-1.0.5-release-files
           path: dist/*
           if-no-files-found: error
           retention-days: 30
