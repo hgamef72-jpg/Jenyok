@@ -117,10 +117,20 @@ test('routes Host, Viewer, Agent, text commands and binary frames', async (t) =>
   host.send(binary);
   assert.deepEqual(Buffer.from((await receivedFrame).data), binary);
 
+  const viewerClosed = new Promise((resolve) => viewer.once('close', (code) => resolve(code)));
+  host.send(Buffer.alloc(5 * 1024 * 1024));
+  assert.equal(await viewerClosed, 1013);
+
+  const viewer2 = await connect('room=test-room&role=viewer');
+  t.after(() => viewer2.close());
+  const hostStatusRequest = waitForMessage(host, (data) => data.toString() === 'GET_HOST_STATUS');
+  viewer2.send('SELECT_HOST|host-1');
+  await hostStatusRequest;
+
   const hostClosed = new Promise((resolve) => host.once('close', resolve));
   host.close();
   await hostClosed;
   const offlineBackupStatus = waitForMessage(agent, (data) => data.toString() === 'GET_BACKUP_STATUS');
-  viewer.send('GET_BACKUP_STATUS');
+  viewer2.send('GET_BACKUP_STATUS');
   await offlineBackupStatus;
 });
