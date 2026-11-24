@@ -98,6 +98,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="v1.0.12-rc1"
+          ASSETS=(dist/Roblox12311-1.5.77.zip dist/Viewer-1.5.77.zip dist/Viewer-1.0.12.apk)
           NOTES="$(cat <<'EOF'
           Jenyok 1.0.12 — Release Candidate 1
 
@@ -116,10 +117,10 @@ jobs:
           EOF
           )"
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --clobber
+            gh release upload "$TAG" "${ASSETS[@]}" --repo "$GITHUB_REPOSITORY" --clobber
             gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --title "Jenyok 1.0.12 — Release Candidate 1" --notes "$NOTES" --prerelease
           else
-            gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --title "Jenyok 1.0.12 — Release Candidate 1" --notes "$NOTES" --prerelease
+            gh release create "$TAG" "${ASSETS[@]}" --repo "$GITHUB_REPOSITORY" --title "Jenyok 1.0.12 — Release Candidate 1" --notes "$NOTES" --prerelease
           fi
 
       - name: Upload candidate packages
