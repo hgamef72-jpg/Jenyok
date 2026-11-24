@@ -73,7 +73,8 @@ def methods(data):
             pos += 6
             for __ in range(u2()):
                 pos += 2
-                pos += u4()
+                attr_length = u4()
+                pos += attr_length
 
     skip_members()
     result = {}
