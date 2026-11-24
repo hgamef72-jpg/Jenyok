@@ -106,6 +106,7 @@ jobs:
           - Added room/host/agent routing, binary screen-frame forwarding, heartbeat cleanup, bounded message sizes and slow-consumer backpressure.
           - Migrated Android Viewer and Windows Host/Viewer packages to the new Relay endpoint:
             wss://jenyok-relay-rebuilt.onrender.com/connect
+          - Preserved Windows Remote Control and Block Host Input request/status/heartbeat routing to the Host.
           - Windows packages include the existing stream pacing/render patches and a migration fallback for saved settings that still point to the old Relay.
           - Android Viewer version 1.0.12.
 
