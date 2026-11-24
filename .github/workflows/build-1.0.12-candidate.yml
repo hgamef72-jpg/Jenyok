@@ -2,7 +2,7 @@ name: Build Jenyok 1.0.12 candidate
 
 on:
   push:
-    branches: ["rebuild/**"]
+    branches: [main, "rebuild/**"]
     paths:
       - "relay/**"
       - "tools/RelayEndpointPatcher.java"
