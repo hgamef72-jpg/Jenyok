@@ -235,7 +235,7 @@ public final class MainActivity extends Activity {
                     if (remoteRequested && !remoteGranted) {
                         remoteRequested=false;
                         screenHint.setVisibility(View.VISIBLE);
-                        screenHint.setText("REMOTE CONTROL TIMEOUT\\nHost did not acknowledge the request");
+                        screenHint.setText("REMOTE CONTROL TIMEOUT\nHost did not acknowledge the request");
                         refreshButtons();
                     }
                 }, 5000);
@@ -252,7 +252,7 @@ public final class MainActivity extends Activity {
                     if (blockRequested && !blockGranted) {
                         blockRequested=false;
                         screenHint.setVisibility(View.VISIBLE);
-                        screenHint.setText("BLOCK INPUT TIMEOUT\\nHost did not confirm the Windows hooks");
+                        screenHint.setText("BLOCK INPUT TIMEOUT\nHost did not confirm the Windows hooks");
                         refreshButtons();
                     }
                 }, 7000);
@@ -421,7 +421,7 @@ public final class MainActivity extends Activity {
             ui.post(() -> {
                 if(wasRequested&&!accepted) {
                     screenHint.setVisibility(View.VISIBLE);
-                    screenHint.setText("REMOTE CONTROL DENIED\\nHost did not grant control");
+                    screenHint.setText("REMOTE CONTROL DENIED\nHost did not grant control");
                 }
                 refreshButtons();
             });
@@ -435,7 +435,7 @@ public final class MainActivity extends Activity {
             ui.post(() -> {
                 if(wasRequested&&!accepted) {
                     screenHint.setVisibility(View.VISIBLE);
-                    screenHint.setText("BLOCK INPUT DENIED\\nWindows input hooks are not active");
+                    screenHint.setText("BLOCK INPUT DENIED\nWindows input hooks are not active");
                 }
                 refreshButtons();
             });
