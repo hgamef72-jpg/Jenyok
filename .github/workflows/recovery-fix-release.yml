@@ -33,12 +33,7 @@ jobs:
           out = pathlib.Path("output")
           out.mkdir(exist_ok=True)
 
-          targets = [
-              "Viewer-1.5.77-portable.zip",
-              "Roblox12311-1.5.77-portable.zip",
-          ]
-
-          for filename in targets:
+          for filename in ["Viewer-1.5.77-portable.zip", "Roblox12311-1.5.77-portable.zip"]:
               source = root / filename
               destination = out / filename.replace(".zip", "-recovery-fix.zip")
 
@@ -47,7 +42,6 @@ jobs:
               ) as outer_out:
                   for item in outer_in.infolist():
                       payload = outer_in.read(item.filename)
-
                       if item.filename == "app/saturn-pc-remote.jar":
                           patched_jar = io.BytesIO()
                           with zipfile.ZipFile(io.BytesIO(payload), "r") as jar_in, zipfile.ZipFile(
@@ -58,14 +52,9 @@ jobs:
                                   if jar_item.filename == "com/saturn/remote/AppsKt.class":
                                       count = content.count(b"1.5.8")
                                       if count != 2:
-                                          raise SystemExit(
-                                              f"Unexpected Recovery Agent constants in {filename}: {count}"
-                                          )
+                                          raise SystemExit(f"Unexpected Recovery Agent constants in {filename}: {count}")
                                       content = content.replace(b"1.5.8", b"1.5.9")
-                                      if b"1.5.8" in content:
-                                          raise SystemExit("Old Recovery Agent version remains")
                                   jar_out.writestr(jar_item, content)
-
                           with zipfile.ZipFile(io.BytesIO(patched_jar.getvalue()), "r") as check:
                               if check.testzip() is not None:
                                   raise SystemExit("Patched application JAR failed integrity check")
@@ -73,39 +62,22 @@ jobs:
                               if klass.count(b"1.5.8") != 0 or klass.count(b"1.5.9") != 5:
                                   raise SystemExit("Recovery Agent version handshake verification failed")
                           payload = patched_jar.getvalue()
-
                       outer_out.writestr(item, payload)
 
               with zipfile.ZipFile(destination, "r") as check:
                   if check.testzip() is not None:
                       raise SystemExit(f"Portable archive integrity check failed: {destination}")
-
               print(f"Patched and verified: {destination}")
           PY
 
-      - name: Publish Jenyok 1.0.1
+      - name: Publish or update Jenyok 1.0.1
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          NOTES="Fixes the Recovery Agent version handshake. The supervisor and installer now agree on version 1.5.9, allowing the Viewer to receive HOST_AGENT_READY and enable the Recovery button when the agent is connected."
-
+          NOTES="Fixes the Recovery Agent version handshake. The supervisor and installer now agree on version 1.5.9."
           if gh release view v1.0.1 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "Release v1.0.1 already exists; replacing its assets."
-            gh release upload v1.0.1 \
-              output/Viewer-1.5.77-portable-recovery-fix.zip \
-              output/Roblox12311-1.5.77-portable-recovery-fix.zip \
-              --repo "$GITHUB_REPOSITORY" --clobber
-            gh release edit v1.0.1 \
-              --repo "$GITHUB_REPOSITORY" \
-              --title "Jenyok 1.0.1 - Recovery Fix" \
-              --notes "$NOTES" \
-              --draft=false --latest
+            gh release upload v1.0.1 output/* --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit v1.0.1 --repo "$GITHUB_REPOSITORY" --title "Jenyok 1.0.1 - Recovery Fix" --notes "$NOTES" --draft=false
           else
-            gh release create v1.0.1 \
-              output/Viewer-1.5.77-portable-recovery-fix.zip \
-              output/Roblox12311-1.5.77-portable-recovery-fix.zip \
-              --repo "$GITHUB_REPOSITORY" \
-              --title "Jenyok 1.0.1 - Recovery Fix" \
-              --notes "$NOTES" \
-              --latest
+            gh release create v1.0.1 output/* --repo "$GITHUB_REPOSITORY" --title "Jenyok 1.0.1 - Recovery Fix" --notes "$NOTES"
           fi
