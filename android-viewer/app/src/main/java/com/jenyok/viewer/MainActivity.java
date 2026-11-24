@@ -228,13 +228,35 @@ public final class MainActivity extends Activity {
         remoteButton = actionButton("REMOTE CONTROL  OFF", CYAN, v -> {
             if (remoteGranted || remoteRequested) {
                 remoteRequested=false; remoteGranted=false; send("REMOTE_CONTROL|0");
-            } else { remoteRequested=true; send("REMOTE_CONTROL_REQUEST|1"); }
+            } else {
+                remoteRequested=true;
+                send("REMOTE_CONTROL_REQUEST|1");
+                heartbeatHandler.postDelayed(() -> {
+                    if (remoteRequested && !remoteGranted) {
+                        remoteRequested=false;
+                        screenHint.setVisibility(View.VISIBLE);
+                        screenHint.setText("REMOTE CONTROL TIMEOUT\nHost did not acknowledge the request");
+                        refreshButtons();
+                    }
+                }, 5000);
+            }
             refreshButtons();
         });
         blockButton = actionButton("BLOCK INPUT  OFF", PURPLE, v -> {
             if (blockGranted || blockRequested) {
                 blockRequested=false; blockGranted=false; send("BLOCK_HOST_INPUT|0");
-            } else { blockRequested=true; send("BLOCK_HOST_INPUT_REQUEST|1"); }
+            } else {
+                blockRequested=true;
+                send("BLOCK_HOST_INPUT_REQUEST|1");
+                heartbeatHandler.postDelayed(() -> {
+                    if (blockRequested && !blockGranted) {
+                        blockRequested=false;
+                        screenHint.setVisibility(View.VISIBLE);
+                        screenHint.setText("BLOCK INPUT TIMEOUT\nHost did not confirm the Windows hooks");
+                        refreshButtons();
+                    }
+                }, 7000);
+            }
             refreshButtons();
         });
         LinearLayout.LayoutParams half = new LinearLayout.LayoutParams(0, dp(48), 1);
@@ -284,7 +306,7 @@ public final class MainActivity extends Activity {
     private void connectSocket() {
         if (connected) return;
         if (socket != null) socket.cancel();
-        agentReady=false; remoteGranted=false; blockGranted=false;
+        agentReady=false; remoteRequested=false; remoteGranted=false; blockRequested=false; blockGranted=false;
         lastStatusPoll=0L;
         lastHeartbeatSent=0L;
         status.setText("● CONNECTING"); status.setTextColor(PURPLE);
@@ -316,7 +338,7 @@ public final class MainActivity extends Activity {
     }
 
     private void selectHost(String id) {
-        selectedHost=id; selectedMonitor=0; agentReady=false; remoteGranted=false; blockGranted=false;
+        selectedHost=id; selectedMonitor=0; agentReady=false; remoteRequested=false; remoteGranted=false; blockRequested=false; blockGranted=false;
         lastStatusPoll=0L;
         HostInfo info=hosts.get(id);
         hostName.setText(info==null ? "Selected PC" : info.name + (info.online ? "  •  ONLINE" : "  •  OFFLINE"));
@@ -392,14 +414,32 @@ public final class MainActivity extends Activity {
             ui.post(() -> { screenHint.setVisibility(View.VISIBLE); screenHint.setText("RECOVERY FAILED\n"+detail); refreshButtons(); }); return;
         }
         if (p.length==2 && p[0].equals("REMOTE_CONTROL_STATUS")) {
-            remoteGranted=p[1].equals("1")&&remoteRequested;
+            boolean wasRequested=remoteRequested;
+            boolean accepted=p[1].equals("1");
+            remoteGranted=accepted&&wasRequested;
             if(!remoteGranted)remoteRequested=false;
-            ui.post(this::refreshButtons); return;
+            ui.post(() -> {
+                if(wasRequested&&!accepted) {
+                    screenHint.setVisibility(View.VISIBLE);
+                    screenHint.setText("REMOTE CONTROL DENIED\nHost did not grant control");
+                }
+                refreshButtons();
+            });
+            return;
         }
         if (p.length==2 && p[0].equals("BLOCK_HOST_INPUT_STATUS")) {
-            blockGranted=p[1].equals("1")&&blockRequested;
+            boolean wasRequested=blockRequested;
+            boolean accepted=p[1].equals("1");
+            blockGranted=accepted&&wasRequested;
             if(!blockGranted)blockRequested=false;
-            ui.post(this::refreshButtons); return;
+            ui.post(() -> {
+                if(wasRequested&&!accepted) {
+                    screenHint.setVisibility(View.VISIBLE);
+                    screenHint.setText("BLOCK INPUT DENIED\nWindows input hooks are not active");
+                }
+                refreshButtons();
+            });
+            return;
         }
         if (p.length>=2 && p[0].equals("BLOCK_HOST_INPUT_ERROR")) {
             blockGranted=false; blockRequested=false;
