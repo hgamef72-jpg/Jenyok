@@ -1,4 +1,4 @@
-name: Build and publish Jenyok 1.0.7
+name: Build and publish Jenyok 1.0.8
 
 on:
   workflow_dispatch:
@@ -48,17 +48,17 @@ jobs:
 
       - name: Verify APK
         run: |
-          cp android-viewer/app/build/outputs/apk/debug/app-debug.apk dist/Viewer-1.0.7.apk
-          test -s dist/Viewer-1.0.7.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose dist/Viewer-1.0.7.apk
-          unzip -t dist/Viewer-1.0.7.apk
+          cp android-viewer/app/build/outputs/apk/debug/app-debug.apk dist/Viewer-1.0.8.apk
+          test -s dist/Viewer-1.0.8.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose dist/Viewer-1.0.8.apk
+          unzip -t dist/Viewer-1.0.8.apk
 
-      - name: Publish Jenyok 1.0.7
+      - name: Publish Jenyok 1.0.8
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           NOTES="$(cat <<'EOF'
-          Jenyok 1.0.7
+          Jenyok 1.0.8
 
           Host streaming:
           - Reduces the Host capture-loop idle interval from 120 ms to 33 ms (approximately 30 FPS pacing before capture, JPEG encoding, and network overhead).
@@ -81,16 +81,16 @@ jobs:
           - No physical Android/Windows runtime test is available in CI; actual FPS and input latency must still be confirmed on the user's devices.
           EOF
           )"
-          if gh release view v1.0.7 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload v1.0.7 dist/* --repo "$GITHUB_REPOSITORY" --clobber
-            gh release edit v1.0.7 --repo "$GITHUB_REPOSITORY" --title "Jenyok 1.0.7 — Performance" --notes "$NOTES" --latest
+          if gh release view v1.0.8 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload v1.0.8 dist/* --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit v1.0.8 --repo "$GITHUB_REPOSITORY" --title "Jenyok 1.0.8 — Performance" --notes "$NOTES" --latest
           else
-            gh release create v1.0.7 dist/* --repo "$GITHUB_REPOSITORY" --title "Jenyok 1.0.7 — Performance" --notes "$NOTES" --latest
+            gh release create v1.0.8 dist/* --repo "$GITHUB_REPOSITORY" --title "Jenyok 1.0.8 — Performance" --notes "$NOTES" --latest
           fi
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Jenyok-1.0.7-release-files
+          name: Jenyok-1.0.8-release-files
           path: dist/*
           if-no-files-found: error
           retention-days: 30
