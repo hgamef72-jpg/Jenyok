@@ -92,6 +92,19 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose dist/Viewer-1.0.12.apk
           unzip -t dist/Viewer-1.0.12.apk
 
+      - name: Smoke test deployed Relay health endpoint
+        run: |
+          for attempt in $(seq 1 24); do
+            response="$(curl -fsS https://jenyok-relay-rebuilt.onrender.com/healthz || true)"
+            if printf '%s' "$response" | grep -q '"ok":true'; then
+              printf '%s\n' "$response"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Relay health endpoint did not become ready"
+          exit 1
+
       - name: Publish v1.0.12 release candidate
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
