@@ -23,6 +23,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 /** Jenyok mobile Viewer. Uses the existing relay and Host wire protocol. */
 // CI release trigger: validate Android and patched Windows packages together.
@@ -31,9 +35,16 @@ public final class MainActivity extends Activity {
     private static final String ROOM = "saturn-pc-remote-public-room-v1";
     private static final int BG = 0xff070b18, PANEL = 0xff10182b, PANEL_2 = 0xff0b1325;
     private static final int CYAN = 0xff31e8ff, PURPLE = 0xffa879ff, TEXT = 0xffedf5ff, MUTED = 0xff8294b5;
-    private final OkHttpClient client = new OkHttpClient.Builder().pingInterval(20, TimeUnit.SECONDS).build();
+    private final OkHttpClient client = new OkHttpClient.Builder()
+            .pingInterval(15, TimeUnit.SECONDS)
+            .readTimeout(0, TimeUnit.MILLISECONDS)
+            .build();
     private final Handler ui = new Handler(Looper.getMainLooper());
     private final Handler heartbeatHandler = new Handler(Looper.getMainLooper());
+    private final ExecutorService frameDecoder = Executors.newSingleThreadExecutor();
+    private final AtomicReference<byte[]> pendingFrame = new AtomicReference<>();
+    private final AtomicBoolean decodingFrame = new AtomicBoolean(false);
+    private volatile boolean destroyed;
     private WebSocket socket;
     private TextView status, hostName, frameInfo, screenHint;
     private Spinner hostPicker, monitorPicker;
@@ -46,7 +57,10 @@ public final class MainActivity extends Activity {
     private boolean connected, connectRequested, agentReady, remoteRequested, remoteGranted;
     private boolean blockRequested, blockGranted, rebuildingHosts, rebuildingMonitors;
     private long receivedFrames;
-    private Bitmap lastFrame;
+    private long fpsWindowStart;
+    private int fpsWindowFrames;
+    private volatile Bitmap lastFrame;
+    private long lastStatusPoll;
 
     private static final class HostInfo {
         final String id, name;
@@ -61,14 +75,16 @@ public final class MainActivity extends Activity {
     private final Runnable poll = new Runnable() {
         @Override public void run() {
             if (connected) {
-                send("GET_AGENT_STATUS");
-                send("GET_HOST_STATUS");
-                send("GET_SCREEN_SIZE");
-                send("START_STREAM");
+                long now = android.os.SystemClock.elapsedRealtime();
                 if (remoteGranted) send("REMOTE_CONTROL_HEARTBEAT");
                 if (blockGranted) send("BLOCK_HOST_INPUT_HEARTBEAT");
+                if (now - lastStatusPoll >= 5000) {
+                    lastStatusPoll = now;
+                    send("GET_HOST_STATUS");
+                    send("GET_SCREEN_SIZE");
+                }
             }
-            heartbeatHandler.postDelayed(this, 3000);
+            heartbeatHandler.postDelayed(this, 900);
         }
     };
     private final Runnable reconnect = new Runnable() {
@@ -258,6 +274,7 @@ public final class MainActivity extends Activity {
         if (connected) return;
         if (socket != null) socket.cancel();
         agentReady=false; remoteGranted=false; blockGranted=false;
+        lastStatusPoll=0L;
         status.setText("● CONNECTING"); status.setTextColor(PURPLE);
         refreshButtons();
         String url = RELAY + "?room=" + ROOM + "&role=viewer";
@@ -288,6 +305,7 @@ public final class MainActivity extends Activity {
 
     private void selectHost(String id) {
         selectedHost=id; selectedMonitor=0; agentReady=false; remoteGranted=false; blockGranted=false;
+        lastStatusPoll=0L;
         HostInfo info=hosts.get(id);
         hostName.setText(info==null ? "Selected PC" : info.name + (info.online ? "  •  ONLINE" : "  •  OFFLINE"));
         monitors.clear(); monitors.put(0,"Screen 1"); rebuildMonitorPicker();
@@ -320,8 +338,9 @@ public final class MainActivity extends Activity {
         }
         if (p.length==2 && p[0].equals("HOST_SELECTED")) {
             selectedHost=p[1];
+            lastStatusPoll=android.os.SystemClock.elapsedRealtime();
             send("GET_AGENT_STATUS"); send("GET_HOST_STATUS");
-            send("GET_SCREEN_SIZE"); send("START_STREAM"); send("SCREEN_SELECT|"+selectedMonitor);
+            send("GET_SCREEN_SIZE"); send("SCREEN_SELECT|"+selectedMonitor); send("START_STREAM");
             ui.post(() -> { HostInfo h=hosts.get(selectedHost); if(h!=null)hostName.setText(h.name+"  •  CONNECTED"); });
             return;
         }
@@ -400,39 +419,70 @@ public final class MainActivity extends Activity {
     }
 
     private void handleFrame(byte[] packet) {
-        if(packet==null || packet.length<4)return;
-        int monitor=selectedMonitor;
-        int jpegStart=-1;
+        if (packet == null || packet.length < 4 || destroyed) return;
+        pendingFrame.set(packet);
+        scheduleFrameDecode();
+    }
 
-        // Host frames are [4-byte big-endian monitor index][JPEG bytes].
-        // Also accept a plain JPEG and tolerate small relay framing prefixes.
-        if(packet.length>=6 && (packet[0]!=(byte)0xff || packet[1]!=(byte)0xd8)) {
-            int candidate=ByteBuffer.wrap(packet,0,4).order(ByteOrder.BIG_ENDIAN).getInt();
-            if(candidate>=0 && candidate<32) monitor=candidate;
+    private void scheduleFrameDecode() {
+        if (destroyed || !decodingFrame.compareAndSet(false, true)) return;
+        try {
+            frameDecoder.execute(() -> {
+                try {
+                    byte[] packet;
+                    while (!destroyed && (packet = pendingFrame.getAndSet(null)) != null) {
+                        Bitmap bitmap = decodeFrame(packet);
+                        if (bitmap == null) continue;
+                        final Bitmap frame = bitmap;
+                        ui.post(() -> {
+                            if (destroyed || screen == null) {
+                                if (!frame.isRecycled()) frame.recycle();
+                                return;
+                            }
+                            Bitmap previous = lastFrame;
+                            lastFrame = frame;
+                            screen.setImageBitmap(frame);
+                            screenHint.setVisibility(View.GONE);
+                            receivedFrames++;
+                            fpsWindowFrames++;
+                            long now = android.os.SystemClock.elapsedRealtime();
+                            if (fpsWindowStart == 0L) fpsWindowStart = now;
+                            long elapsed = now - fpsWindowStart;
+                            if (elapsed >= 1000L) {
+                                int fps = (int)Math.round(fpsWindowFrames * 1000.0 / elapsed);
+                                frameInfo.setText("LIVE  •  " + frame.getWidth() + " × " + frame.getHeight()
+                                        + "  •  " + fps + " FPS");
+                                frameInfo.setTextColor(CYAN);
+                                fpsWindowFrames = 0;
+                                fpsWindowStart = now;
+                            }
+                            if (previous != null && previous != frame && !previous.isRecycled()) previous.recycle();
+                        });
+                    }
+                } finally {
+                    decodingFrame.set(false);
+                    if (!destroyed && pendingFrame.get() != null) scheduleFrameDecode();
+                }
+            });
+        } catch (RuntimeException rejected) {
+            decodingFrame.set(false);
         }
-        if(monitor!=selectedMonitor)return;
-        for(int i=0;i<packet.length-1;i++) {
-            if((packet[i]&0xff)==0xff && (packet[i+1]&0xff)==0xd8){jpegStart=i;break;}
+    }
+
+    private Bitmap decodeFrame(byte[] packet) {
+        int jpegStart = -1;
+        for (int i = 0; i < packet.length - 1; i++) {
+            if ((packet[i] & 0xff) == 0xff && (packet[i + 1] & 0xff) == 0xd8) {
+                jpegStart = i;
+                break;
+            }
         }
-        if(jpegStart<0)return;
-        if(jpegStart>=4) {
-            int be=ByteBuffer.wrap(packet,0,4).order(ByteOrder.BIG_ENDIAN).getInt();
-            int le=ByteBuffer.wrap(packet,0,4).order(ByteOrder.LITTLE_ENDIAN).getInt();
-            int candidate=(be>=0 && be<32)?be:((le>=0 && le<32)?le:monitor);
-            monitor=candidate;
-            if(monitor!=selectedMonitor)return;
-        }
-        BitmapFactory.Options options=new BitmapFactory.Options();
-        options.inPreferredConfig=Bitmap.Config.RGB_565;
-        Bitmap bitmap=BitmapFactory.decodeByteArray(packet,jpegStart,packet.length-jpegStart,options);
-        if(bitmap==null)return;
-        lastFrame=bitmap; receivedFrames++;
-        final Bitmap frame=bitmap; final long count=receivedFrames;
-        ui.post(() -> {
-            screen.setImageBitmap(frame); screenHint.setVisibility(View.GONE);
-            frameInfo.setText("LIVE  •  "+frame.getWidth()+" × "+frame.getHeight()+"  •  "+count+" FRAMES");
-            frameInfo.setTextColor(CYAN);
-        });
+        if (jpegStart < 0 || packet.length - jpegStart < 4) return null;
+        // Host already receives SCREEN_SELECT; don't guess monitor IDs from an
+        // undocumented prefix because it can be a length field instead.
+        BitmapFactory.Options options = new BitmapFactory.Options();
+        options.inPreferredConfig = Bitmap.Config.RGB_565;
+        return BitmapFactory.decodeByteArray(packet, jpegStart, packet.length - jpegStart, options);
     }
 
     private void clearScreen(String message) {
@@ -482,7 +532,11 @@ public final class MainActivity extends Activity {
         heartbeatHandler.removeCallbacksAndMessages(null);
         if(socket!=null)socket.close(1000,"App closed");
         client.dispatcher().executorService().shutdown();
+        destroyed=true;
+        pendingFrame.set(null);
+        frameDecoder.shutdownNow();
         if(lastFrame!=null && !lastFrame.isRecycled())lastFrame.recycle();
+        lastFrame=null;
         super.onDestroy();
     }
 }
