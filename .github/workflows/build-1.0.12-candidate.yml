@@ -26,7 +26,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-candidate:
@@ -91,6 +91,36 @@ jobs:
           test -s dist/Viewer-1.0.12.apk
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose dist/Viewer-1.0.12.apk
           unzip -t dist/Viewer-1.0.12.apk
+
+      - name: Publish v1.0.12 release candidate
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="v1.0.12-rc1"
+          NOTES="$(cat <<'EOF'
+          Jenyok 1.0.12 — Release Candidate 1
+
+          - Rebuilt the WebSocket Relay from the recovered Host, Viewer and Recovery Agent protocol.
+          - Added room/host/agent routing, binary screen-frame forwarding, heartbeat cleanup, bounded message sizes and slow-consumer backpressure.
+          - Migrated Android Viewer and Windows Host/Viewer packages to the new Relay endpoint:
+            wss://jenyok-relay-rebuilt.onrender.com/connect
+          - Windows packages include the existing stream pacing/render patches and a migration fallback for saved settings that still point to the old Relay.
+          - Android Viewer version 1.0.12.
+
+          Validation:
+          - Relay integration tests passed in GitHub Actions.
+          - Windows Host and Viewer package patching and ZIP integrity checks passed.
+          - Android APK build, signature verification and ZIP integrity checks passed.
+          - Physical-device end-to-end testing has not yet been completed. This is a release candidate, not a final stable release.
+          EOF
+          )"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --title "Jenyok 1.0.12 — Release Candidate 1" --notes "$NOTES" --prerelease
+          else
+            gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --title "Jenyok 1.0.12 — Release Candidate 1" --notes "$NOTES" --prerelease
+          fi
 
       - name: Upload candidate packages
         uses: actions/upload-artifact@v4
