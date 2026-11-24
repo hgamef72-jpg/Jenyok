@@ -64,6 +64,10 @@ test('routes Host, Viewer, Agent, text commands and binary frames', async (t) =>
   viewer.send('REMOTE_CONTROL_REQUEST|1');
   await hostCommand;
 
+  const createBackups = waitForMessage(host, (data) => data.toString() === 'CREATE_BACKUPS');
+  viewer.send('CREATE_BACKUPS');
+  await createBackups;
+
   const agentCommand = waitForMessage(agent, (data) => data.toString() === 'RECOVER_HOST');
   viewer.send('RECOVER_HOST');
   await agentCommand;
