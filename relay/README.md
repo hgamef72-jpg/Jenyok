@@ -27,3 +27,5 @@ The service caps WebSocket message size and queued output, disables per-message 
 ## Compatibility status
 
 Protocol reconstruction is based on recovered `HostState.kt` and `ViewerWindow.kt`. Agent/recovery side-channel behavior and end-to-end Android/Windows runtime compatibility remain to be verified before release.
+
+The integration suite waits for the fully populated discovery record before asserting routing behavior.
