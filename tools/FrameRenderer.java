@@ -79,13 +79,24 @@ public final class FrameRenderer {
         }
     }
 
+    private static int findJpegStart(byte[] packet) {
+        if (packet == null) return -1;
+        for (int i = 0; i + 1 < packet.length; i++) {
+            if ((packet[i] & 0xff) == 0xff && (packet[i + 1] & 0xff) == 0xd8) return i;
+        }
+        return -1;
+    }
+
     private static void scheduleDecode(ViewerWindow viewer, State state) {
         if (!state.decoding.compareAndSet(false, true)) return;
         DECODER.execute(() -> {
             try {
                 byte[] packet;
                 while ((packet = state.pendingBytes.getAndSet(null)) != null) {
-                    BufferedImage decoded = ImageIO.read(new ByteArrayInputStream(packet));
+                    int jpegStart = findJpegStart(packet);
+                    if (jpegStart < 0 || packet.length - jpegStart < 4) continue;
+                    BufferedImage decoded = ImageIO.read(
+                            new ByteArrayInputStream(packet, jpegStart, packet.length - jpegStart));
                     if (decoded == null) continue;
                     JLabel label = screen(viewer);
                     int width = Math.max(1, label.getWidth());
