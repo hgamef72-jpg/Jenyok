@@ -92,4 +92,11 @@ test('routes Host, Viewer, Agent, text commands and binary frames', async (t) =>
   const receivedFrame = waitForMessage(viewer, (_data, isBinary) => isBinary);
   host.send(binary);
   assert.deepEqual(Buffer.from((await receivedFrame).data), binary);
+
+  const hostClosed = new Promise((resolve) => host.once('close', resolve));
+  host.close();
+  await hostClosed;
+  const offlineBackupStatus = waitForMessage(agent, (data) => data.toString() === 'GET_BACKUP_STATUS');
+  viewer.send('GET_BACKUP_STATUS');
+  await offlineBackupStatus;
 });
