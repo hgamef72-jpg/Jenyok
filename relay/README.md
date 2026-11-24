@@ -20,7 +20,7 @@ Render configuration: Node runtime, root directory `relay`, build command `npm i
 - Viewer discovery: `GET_HOST_LIST`, response `HOST_LIST_BEGIN`, `HOST_INFO|<id>|<base64url-name>|<screen-count>|<agent-ready>|<online>`, `HOST_LIST_END`.
 - Viewer selects a host with `SELECT_HOST|<id>`; subsequent text commands and binary input are routed to that Host.
 - Host text responses and binary screen frames are forwarded only to Viewers selecting that Host.
-- Recovery Agent commands (`GET_AGENT_STATUS`, `RECOVER_HOST`, backup status/restore operations) are routed to the Agent socket, including while the main Host is offline.
+- `GET_AGENT_STATUS` and `RECOVER_HOST` are routed to the Recovery Agent. Backup/status commands go to a live Host first and fall back to the Agent when the Host is offline.
 
 The service caps WebSocket message size, queued output, total connections, rooms, Hosts per room and Viewers per room; disables per-message compression; removes disconnected peers; and uses ping/pong liveness checks. The legacy public room has no client authentication; this first implementation preserves that legacy connection contract. Do not expose additional private rooms without coordinated client authentication.
 
