@@ -122,8 +122,8 @@ function cleanup(ws) {
         host.agent = null;
         host.agentReady = false;
       }
-      notifyHostList(room);
       pruneHost(room, host);
+      notifyHostList(room);
     }
   } else {
     room.viewers.delete(ws);
