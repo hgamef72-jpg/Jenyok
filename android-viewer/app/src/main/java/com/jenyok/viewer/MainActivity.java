@@ -381,6 +381,7 @@ public final class MainActivity extends Activity {
         if (p.length==2 && p[0].equals("SCREEN_COUNT")) {
             int count=0; try{count=Math.max(0,Math.min(32,Integer.parseInt(p[1])));}catch(Exception ignored){}
             final int n=count;
+            if (selectedMonitor >= Math.max(1, n)) selectedMonitor = 0;
             ui.post(() -> { monitors.clear(); for(int i=0;i<n;i++)monitors.put(i,"Screen "+(i+1)); if(monitors.isEmpty())monitors.put(0,"Screen 1"); rebuildMonitorPicker(); });
             return;
         }
