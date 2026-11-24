@@ -57,7 +57,7 @@ test('routes Host, Viewer, Agent, text commands and binary frames', async (t) =>
   agent.send('HOST_AGENT_READY|1');
   viewer.send('GET_HOST_LIST');
   const info = await waitForMessage(viewer, (data) => data.toString() === 'HOST_INFO|host-1|VGVzdCBQQw|2|0|1');
-  assert.equal(info.data.toString(), 'HOST_INFO|host-1|VGVzdCBQQw|2|1|1');
+  assert.equal(info.data.toString(), 'HOST_INFO|host-1|VGVzdCBQQw|2|0|1');
 
   viewer.send('SELECT_HOST|host-1');
   const hostCommand = waitForMessage(host, (data) => data.toString() === 'REMOTE_CONTROL_REQUEST|1');
