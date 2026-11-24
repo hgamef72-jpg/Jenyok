@@ -87,10 +87,25 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create v1.0.1 \
-            output/Viewer-1.5.77-portable-recovery-fix.zip \
-            output/Roblox12311-1.5.77-portable-recovery-fix.zip \
-            --repo "$GITHUB_REPOSITORY" \
-            --title "Jenyok 1.0.1 - Recovery Fix" \
-            --notes "Fixes the Recovery Agent version handshake. The supervisor and installer now agree on version 1.5.9, allowing the Viewer to receive HOST_AGENT_READY and enable the Recovery button when the agent is connected." \
-            --latest
+          NOTES="Fixes the Recovery Agent version handshake. The supervisor and installer now agree on version 1.5.9, allowing the Viewer to receive HOST_AGENT_READY and enable the Recovery button when the agent is connected."
+
+          if gh release view v1.0.1 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release v1.0.1 already exists; replacing its assets."
+            gh release upload v1.0.1 \
+              output/Viewer-1.5.77-portable-recovery-fix.zip \
+              output/Roblox12311-1.5.77-portable-recovery-fix.zip \
+              --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit v1.0.1 \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "Jenyok 1.0.1 - Recovery Fix" \
+              --notes "$NOTES" \
+              --draft=false --latest
+          else
+            gh release create v1.0.1 \
+              output/Viewer-1.5.77-portable-recovery-fix.zip \
+              output/Roblox12311-1.5.77-portable-recovery-fix.zip \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "Jenyok 1.0.1 - Recovery Fix" \
+              --notes "$NOTES" \
+              --latest
+          fi
