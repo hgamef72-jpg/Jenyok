@@ -64,7 +64,7 @@ function resolveHostId(viewer) {
 
 function hostInfo(host) {
   const name = Buffer.from(host.name || 'Remote PC', 'utf8').toString('base64url');
-  return `HOST_INFO|${host.id}|${name}|${host.screenCount}|${host.agentReady ? '1' : '0'}|${host.online ? '1' : '0'}`;
+  return `HOST_INFO|${host.id}|${name}|${host.screenCount}|${host.online ? '1' : '0'}|${host.agentReady ? '1' : '0'}`;
 }
 
 function sendHostList(viewer) {
