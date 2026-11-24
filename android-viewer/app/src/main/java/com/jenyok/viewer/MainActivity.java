@@ -25,6 +25,7 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 /** Jenyok mobile Viewer. Uses the existing relay and Host wire protocol. */
+// CI release trigger: validate Android and patched Windows packages together.
 public final class MainActivity extends Activity {
     private static final String RELAY = "wss://saturn-pc-remote-relay.onrender.com/connect";
     private static final String ROOM = "saturn-pc-remote-public-room-v1";
