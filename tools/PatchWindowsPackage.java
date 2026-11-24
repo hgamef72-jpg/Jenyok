@@ -58,7 +58,7 @@ public final class PatchWindowsPackage {
       }
       insn = next;
     }
-    if (n != 1) {
+    if (n < 1) {
       System.err.println("DEBUG method " + methodName + " descriptor " + m.desc);
       int index = 0;
       for (AbstractInsnNode insn = m.instructions.getFirst(); insn != null; insn = insn.getNext(), index++) {
