@@ -472,14 +472,10 @@ public final class MainActivity extends Activity {
     }
 
     private void handleFrame(byte[] packet) {
-        // HostApp.runHostSession prefixes every JPEG with a big-endian monitor index.
-        // Ignore other monitors before decoding so they cannot consume the mobile CPU.
-        if (packet == null || packet.length < 6 || destroyed) return;
-        int monitor = ((packet[0] & 0xff) << 24)
-                | ((packet[1] & 0xff) << 16)
-                | ((packet[2] & 0xff) << 8)
-                | (packet[3] & 0xff);
-        if (monitor != selectedMonitor) return;
+        // Relay deployments may prepend metadata before the Host's monitor index.
+        // Do not assume the first four bytes are always the monitor index: locate
+        // the JPEG in decodeFrame(), which validates and drops non-image messages.
+        if (packet == null || packet.length < 4 || destroyed) return;
         pendingFrame.set(packet);
         scheduleFrameDecode();
     }
