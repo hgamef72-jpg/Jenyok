@@ -1,0 +1,96 @@
+name: Build and publish Jenyok 1.0.4
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "android-viewer/**"
+      - "tools/patch_windows_recovery.py"
+      - ".github/workflows/publish-1.0.4.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download v1.0.3 Windows packages
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p input dist
+          gh release download v1.0.3 --repo "$GITHUB_REPOSITORY" --pattern "Viewer-1.5.77.zip" --dir input
+          gh release download v1.0.3 --repo "$GITHUB_REPOSITORY" --pattern "Roblox12311-1.5.77.zip" --dir input
+
+      - name: Patch and verify Windows Recovery action
+        run: |
+          python tools/patch_windows_recovery.py input/Viewer-1.5.77.zip dist/Viewer-1.5.77.zip
+          python tools/patch_windows_recovery.py input/Roblox12311-1.5.77.zip dist/Roblox12311-1.5.77.zip
+          unzip -t dist/Viewer-1.5.77.zip
+          unzip -t dist/Roblox12311-1.5.77.zip
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: ""
+
+      - name: Install Android SDK components
+        run: sdkmanager --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build Android Viewer
+        working-directory: android-viewer
+        run: gradle --no-daemon clean assembleDebug
+
+      - name: Verify APK
+        run: |
+          cp android-viewer/app/build/outputs/apk/debug/app-debug.apk dist/Viewer-1.0.4.apk
+          test -s dist/Viewer-1.0.4.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose dist/Viewer-1.0.4.apk
+          unzip -t dist/Viewer-1.0.4.apk
+
+      - name: Publish Jenyok 1.0.4
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NOTES="$(cat <<'EOF'
+          Jenyok 1.0.4
+
+          Windows Viewer / Recovery:
+          - Recovery is now enabled while the Viewer is connected, even if the Recovery Agent readiness response is delayed or missing.
+          - The Viewer sends RECOVER_HOST instead of permanently blocking the action behind the readiness flag.
+          - This removes a UI/protocol deadlock; the Recovery Agent must still be running and reachable for the Host restart to complete.
+          - The embedded Agent version handshake is verified as 1.5.9.
+
+          Android Viewer:
+          - Rebuilt the mobile UI with a dark neon cyan/purple visual style.
+          - Improved host discovery and explicit host selection.
+          - Requests screen size and START_STREAM after selecting a Host.
+          - Polls Agent/Host status and display inventory while connected.
+          - Decodes both raw JPEG frames and monitor-index-prefixed JPEG frames.
+          - Keeps monitor selection and touch coordinate mapping.
+          - Keeps Recovery, Remote Control, and Block Host Input controls.
+
+          Validation:
+          - Windows nested JAR and portable ZIP integrity are checked.
+          - Android APK build, ZIP integrity, and APK signature verification are required before publishing.
+          - Physical-device and real Windows Recovery end-to-end tests are not available in this workflow.
+          EOF
+          )"
+          gh release create v1.0.4 dist/* --repo "$GITHUB_REPOSITORY" --title "Jenyok 1.0.4" --notes "$NOTES" --latest
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Jenyok-1.0.4-release-files
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 30
