@@ -91,7 +91,7 @@ function sendToHost(viewer, data, binary = false) {
     safeSend(host.agent, data, { binary });
     return;
   }
-  if (host.ws?.readyState === WebSocket.OPEN && host.online) {
+  if (host.ws?.readyState === WebSocket.OPEN) {
     safeSend(host.ws, data, { binary });
     return;
   }
