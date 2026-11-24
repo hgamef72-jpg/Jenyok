@@ -68,6 +68,22 @@ test('routes Host, Viewer, Agent, text commands and binary frames', async (t) =>
   viewer.send('CREATE_BACKUPS');
   await createBackups;
 
+  const backupStatus = waitForMessage(host, (data) => data.toString() === 'GET_BACKUP_STATUS');
+  viewer.send('GET_BACKUP_STATUS');
+  await backupStatus;
+
+  const deleteBackups = waitForMessage(host, (data) => data.toString() === 'DELETE_ALL_BACKUPS');
+  viewer.send('DELETE_ALL_BACKUPS');
+  await deleteBackups;
+
+  const restoreBackup = waitForMessage(host, (data) => data.toString() === 'BACKUP_RESTORE|1');
+  viewer.send('BACKUP_RESTORE|1');
+  await restoreBackup;
+
+  const agentStatus = waitForMessage(agent, (data) => data.toString() === 'GET_AGENT_STATUS');
+  viewer.send('GET_AGENT_STATUS');
+  await agentStatus;
+
   const agentCommand = waitForMessage(agent, (data) => data.toString() === 'RECOVER_HOST');
   viewer.send('RECOVER_HOST');
   await agentCommand;
