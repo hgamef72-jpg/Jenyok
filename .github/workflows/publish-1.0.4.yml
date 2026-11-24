@@ -7,7 +7,7 @@ on:
     paths:
       - "android-viewer/**"
       - "tools/PatchWindowsPackage.java"
-      - ".github/workflows/publish-1.0.5.yml"
+      - ".github/workflows/publish-1.0.4.yml"
 
 permissions:
   contents: write
@@ -26,8 +26,14 @@ jobs:
           gh release download v1.0.3 --repo "$GITHUB_REPOSITORY" --pattern "Viewer-1.5.77.zip" --dir input
           gh release download v1.0.3 --repo "$GITHUB_REPOSITORY" --pattern "Roblox12311-1.5.77.zip" --dir input
 
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
       - name: Patch and verify Windows Recovery action with ASM
         run: |
+          set -euxo pipefail
           curl -fsSL https://repo.maven.apache.org/maven2/org/ow2/asm/asm/9.7.1/asm-9.7.1.jar -o /tmp/asm.jar
           curl -fsSL https://repo.maven.apache.org/maven2/org/ow2/asm/asm-tree/9.7.1/asm-tree-9.7.1.jar -o /tmp/asm-tree.jar
           mkdir -p tools/build
@@ -36,11 +42,6 @@ jobs:
           java -cp tools/build:/tmp/asm.jar:/tmp/asm-tree.jar PatchWindowsPackage input/Roblox12311-1.5.77.zip dist/Roblox12311-1.5.77.zip
           unzip -t dist/Viewer-1.5.77.zip
           unzip -t dist/Roblox12311-1.5.77.zip
-
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
 
       - uses: android-actions/setup-android@v3
         with:
