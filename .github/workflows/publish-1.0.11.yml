@@ -1,0 +1,120 @@
+name: Build and publish Jenyok 1.0.11
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/publish-1.0.11.yml"
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download baseline Windows packages
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p input dist tools/classes
+          gh release download v1.0.5 --repo "$GITHUB_REPOSITORY" --pattern "Viewer-1.5.77.zip" --dir input
+          gh release download v1.0.5 --repo "$GITHUB_REPOSITORY" --pattern "Roblox12311-1.5.77.zip" --dir input
+
+      - name: Prepare ASM and compile bounded frame pipeline
+        run: |
+          curl -fsSL https://repo.maven.apache.org/maven2/org/ow2/asm/asm/9.7.1/asm-9.7.1.jar -o input/asm.jar
+          curl -fsSL https://repo.maven.apache.org/maven2/org/ow2/asm/asm-tree/9.7.1/asm-tree-9.7.1.jar -o input/asm-tree.jar
+          unzip -p input/Viewer-1.5.77.zip app/saturn-pc-remote.jar > input/viewer-app.jar
+          javac --release 17 -cp "input/asm.jar:input/asm-tree.jar:input/viewer-app.jar" -d tools/classes \
+            tools/JenyokStreamPatcher.java tools/StreamPacer.java tools/FrameRenderer.java
+
+      - name: Optimize Host capture and apply fixed 50 FPS pacing
+        run: |
+          java -cp "tools/classes:input/asm.jar:input/asm-tree.jar" JenyokStreamPatcher \
+            host input/Roblox12311-1.5.77.zip dist/Roblox12311-1.5.77-stream.zip \
+            tools/classes/com/saturn/remote/StreamPacer.class
+          python tools/patch_windows_recovery.py \
+            dist/Roblox12311-1.5.77-stream.zip dist/Roblox12311-1.5.77.zip
+          rm dist/Roblox12311-1.5.77-stream.zip
+
+      - name: Optimize Windows Viewer decode and render pipeline
+        run: |
+          java -cp "tools/classes:input/asm.jar:input/asm-tree.jar" JenyokStreamPatcher \
+            viewer input/Viewer-1.5.77.zip dist/Viewer-1.5.77.zip \
+            tools/classes/com/saturn/remote/FrameRenderer.class
+          unzip -t dist/Roblox12311-1.5.77.zip
+          unzip -t dist/Viewer-1.5.77.zip
+
+      - name: Build Android Viewer
+        uses: android-actions/setup-android@v3
+        with:
+          packages: ""
+
+      - name: Install Android SDK components
+        run: sdkmanager --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Assemble Android APK
+        working-directory: android-viewer
+        run: gradle --no-daemon clean assembleDebug
+
+      - name: Verify Android APK
+        run: |
+          cp android-viewer/app/build/outputs/apk/debug/app-debug.apk dist/Viewer-1.0.11.apk
+          test -s dist/Viewer-1.0.11.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose dist/Viewer-1.0.11.apk
+          unzip -t dist/Viewer-1.0.11.apk
+
+      - name: Publish Jenyok 1.0.11
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NOTES="$(cat <<'EOF'
+          Jenyok 1.0.11 — relay frame parsing fix
+
+          Host:
+          - Captures only the currently selected monitor instead of capturing/encoding/transmitting every connected display on every cycle.
+          - Reduces capture width from 1280 to 960 pixels to lower JPEG encode, decode and network cost.
+          - Uses a 20 ms start-to-start frame pacer (50 FPS target).
+          - Waits for each WebSocket binary send to complete before starting another frame, applying backpressure instead of allowing an unbounded outbound frame queue.
+          - Preserves the existing 4-byte big-endian monitor index + JPEG wire format.
+
+          Windows Viewer:
+          - Replaces the synchronous WebSocket callback decode path with a single background decoder and strips relay metadata before JPEG decode.
+          - Uses latest-frame-wins coalescing and at most one pending Swing render callback.
+          - Performs image scaling off the Swing EDT.
+          - Starts from the original v1.5.77 Viewer package; the previous blind byte-offset Viewer patches are not applied.
+
+          Android Viewer:
+          - Accepts relay frames with optional metadata and locates the JPEG start marker before decode.
+          - Scans for the JPEG start marker, avoiding assumptions about relay header layout.
+          - Keeps the bounded latest-frame decoder and render queue.
+
+          Host Recovery:
+          - Applies the Agent version and Power shutdown patch only to the Host package.
+          - Does not patch Windows Viewer startup methods.
+
+          Validation:
+          - ASM patcher requires exact v1.5.77 method and bytecode patterns and fails closed when they differ.
+          - Portable ZIP integrity checks, Android APK build, signature and ZIP checks are required.
+          - 50 FPS is a pacing target; actual delivered FPS depends on capture, JPEG encode, network, relay and client hardware.
+          - Render relay source is not included in this repository, so relay-side memory/backpressure behavior still needs its own source audit.
+          EOF
+          )"
+          if gh release view v1.0.11 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload v1.0.11 dist/* --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit v1.0.11 --repo "$GITHUB_REPOSITORY" --title "Jenyok 1.0.11 — 50 FPS Stream Pipeline" --notes "$NOTES" --latest
+          else
+            gh release create v1.0.11 dist/* --repo "$GITHUB_REPOSITORY" --title "Jenyok 1.0.11 — 50 FPS Stream Pipeline" --notes "$NOTES" --latest
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Jenyok-1.0.11-release-files
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 30
