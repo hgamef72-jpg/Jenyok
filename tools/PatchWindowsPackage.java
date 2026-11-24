@@ -58,7 +58,18 @@ public final class PatchWindowsPackage {
       }
       insn = next;
     }
-    if (n != 1) throw new IllegalStateException(methodName + ": expected one agent gate, found " + n);
+    if (n != 1) {
+      System.err.println("DEBUG method " + methodName + " descriptor " + m.desc);
+      int index = 0;
+      for (AbstractInsnNode insn = m.instructions.getFirst(); insn != null; insn = insn.getNext(), index++) {
+        String detail = "";
+        if (insn instanceof FieldInsnNode f) detail = " " + f.owner + "." + f.name + " " + f.desc;
+        else if (insn instanceof MethodInsnNode call) detail = " " + call.owner + "." + call.name + call.desc;
+        else if (insn instanceof JumpInsnNode jump) detail = " -> " + jump.label.getLabel();
+        System.err.println(index + " opcode=" + insn.getOpcode() + " type=" + insn.getType() + detail);
+      }
+      throw new IllegalStateException(methodName + ": expected one agent gate, found " + n);
+    }
     return n;
   }
 
