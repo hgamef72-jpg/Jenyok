@@ -1,0 +1,136 @@
+name: Publish Jenyok 1.0.15 — Local Recovery and Stream Diagnostics
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/publish-1.0.15-recovery-stream.yml"
+      - "tools/v1.0.15/**"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download RC2 baseline packages
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p input output tools/classes
+          gh release download v1.0.12-rc2 --repo "$GITHUB_REPOSITORY" --pattern "Roblox12311-1.5.77.zip" --dir input
+          gh release download v1.0.12-rc2 --repo "$GITHUB_REPOSITORY" --pattern "Viewer-1.5.77.zip" --dir input
+          gh release download v1.0.12-rc2 --repo "$GITHUB_REPOSITORY" --pattern "Viewer-1.0.12.apk" --dir output
+          unzip -p input/Roblox12311-1.5.77.zip app/saturn-pc-remote.jar > input/host-app.jar
+          unzip -p input/Viewer-1.5.77.zip app/saturn-pc-remote.jar > input/viewer-app.jar
+          test -s input/host-app.jar
+          test -s input/viewer-app.jar
+
+      - name: Compile patchers and run synthetic JPEG test
+        run: |
+          curl -fsSL https://repo.maven.apache.org/maven2/org/ow2/asm/asm/9.7.1/asm-9.7.1.jar -o input/asm.jar
+          curl -fsSL https://repo.maven.apache.org/maven2/org/ow2/asm/asm-tree/9.7.1/asm-tree-9.7.1.jar -o input/asm-tree.jar
+          javac --release 17 -cp "input/host-app.jar" -d tools/classes tools/v1.0.15/HostRecoveryBridge.java
+          javac --release 17 -cp "input/viewer-app.jar" -d tools/classes tools/v1.0.15/FrameRenderer.java
+          javac --release 17 -cp "input/asm.jar:input/asm-tree.jar:input/host-app.jar" -d tools/classes tools/v1.0.15/HostRecoveryPatcher.java
+          javac --release 17 -cp "tools/classes:input/viewer-app.jar" -d tools/classes tools/v1.0.15/FrameRendererTest.java
+          java -Djava.awt.headless=true -cp "tools/classes:input/viewer-app.jar" com.saturn.remote.FrameRendererTest
+
+      - name: Patch Host with local watchdog Recovery route
+        run: |
+          java -cp "tools/classes:input/asm.jar:input/asm-tree.jar:input/host-app.jar" HostRecoveryPatcher \
+            input/Roblox12311-1.5.77.zip output/Roblox12311-1.5.77.zip \
+            tools/classes/com/saturn/remote/HostRecoveryBridge.class
+
+      - name: Patch Viewer renderer and validate packages
+        run: |
+          python tools/v1.0.15/patch_viewer_renderer.py \
+            input/Viewer-1.5.77.zip output/Viewer-1.5.77.zip \
+            tools/classes/com/saturn/remote/FrameRenderer.class
+          python - <<'PY'
+          import io
+          import pathlib
+          import zipfile
+
+          packages = [
+              pathlib.Path("output/Roblox12311-1.5.77.zip"),
+              pathlib.Path("output/Viewer-1.5.77.zip"),
+          ]
+          for package in packages:
+              with zipfile.ZipFile(package) as outer:
+                  bad = outer.testzip()
+                  if bad:
+                      raise SystemExit(f"{package}: ZIP integrity failure: {bad}")
+                  app = outer.read("app/saturn-pc-remote.jar")
+                  with zipfile.ZipFile(io.BytesIO(app)) as jar:
+                      bad = jar.testzip()
+                      if bad:
+                          raise SystemExit(f"{package}: nested JAR integrity failure: {bad}")
+                      names = set(jar.namelist())
+                      if package.name.startswith("Roblox"):
+                          bridge = "com/saturn/remote/HostRecoveryBridge.class"
+                          listener = "com/saturn/remote/HostState$connect$1.class"
+                          if bridge not in names or listener not in names:
+                              raise SystemExit("Host Recovery bridge injection is missing")
+                          listener_bytes = jar.read(listener)
+                          if b"HostRecoveryBridge" not in listener_bytes:
+                              raise SystemExit("Host listener does not call local Recovery bridge")
+                      else:
+                          renderer = "com/saturn/remote/FrameRenderer.class"
+                          listener = "com/saturn/remote/ViewerWindow$connect$1.class"
+                          if renderer not in names or listener not in names:
+                              raise SystemExit("Viewer frame renderer injection is missing")
+                          if b"FrameRenderer" not in jar.read(listener):
+                              raise SystemExit("Viewer listener is not wired to FrameRenderer")
+                          renderer_bytes = jar.read(renderer)
+                          if b"viewer-stream.log" not in renderer_bytes:
+                              raise SystemExit("Viewer stream diagnostics are missing")
+              print(f"Verified {package}: {package.stat().st_size} bytes")
+          PY
+          test -s output/Viewer-1.0.12.apk
+          unzip -t output/Viewer-1.0.12.apk
+
+      - name: Publish release v1.0.15
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NOTES=$(cat <<'EOF'
+          Jenyok 1.0.15 — Local Recovery Fallback and PC Viewer Diagnostics
+
+          Recovery:
+          - The Host now advertises local watchdog readiness independently of the network Recovery Agent.
+          - If the network Agent is offline but the Host is online, Relay forwards RECOVER_HOST to the Host.
+          - Host writes the existing local watchdog request marker and starts the registered Recovery task if it is not already running.
+          - The existing watchdog restarts the primary Host executable; this path does not restore backups.
+          - If both Host and network Agent are offline, a remote command cannot be delivered. The local watchdog still restarts a crashed Host automatically.
+
+          PC Viewer:
+          - Replaces the silent frame renderer with JPEG packet diagnostics.
+          - Preserves aspect ratio and avoids collapsing frames to 1x1 while the screen panel is being laid out.
+          - Shows decoded frame dimensions and counters in the Viewer status line.
+          - Writes packet/decode diagnostics to %USERPROFILE%\\.saturn-pc-remote\\viewer-stream.log.
+          - Relay logs frame counters, packet sizes and selected Viewer counts without logging screen contents.
+
+          Installation:
+          1. Extract Roblox12311-1.5.77.zip and Viewer-1.5.77.zip.
+          2. Replace the existing Host and PC Viewer folders with these packages.
+          3. Android Viewer 1.0.12 is carried forward unchanged.
+
+          Validation:
+          - CI compiles the bytecode patcher and helper classes.
+          - CI tests decoding a synthetic JPEG packet with the 4-byte monitor-index prefix.
+          - CI verifies nested JAR and package ZIP integrity and checks both injected code paths.
+          - Physical Windows runtime and multi-monitor end-to-end testing still require confirmation on the target PC.
+          EOF
+          )
+          if gh release view v1.0.15 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload v1.0.15 output/* --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit v1.0.15 --repo "$GITHUB_REPOSITORY" --title "Jenyok 1.0.15 — Local Recovery and Stream Diagnostics" --notes "$NOTES" --draft=false --prerelease=false
+          else
+            gh release create v1.0.15 output/* --repo "$GITHUB_REPOSITORY" --title "Jenyok 1.0.15 — Local Recovery and Stream Diagnostics" --notes "$NOTES"
+          fi
