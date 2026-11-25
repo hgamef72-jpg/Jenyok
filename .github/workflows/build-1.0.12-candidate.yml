@@ -12,7 +12,6 @@ on:
       - "tools/FrameRenderer.java"
       - "tools/patch_windows_recovery.py"
       - "tools/patch_host_recovery_fallback.py"
-      - "tools/patch_host_recovery_fallback.py"
       - "android-viewer/**"
       - ".github/workflows/build-1.0.12-candidate.yml"
   pull_request:
