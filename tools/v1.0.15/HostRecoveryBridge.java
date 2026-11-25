@@ -31,7 +31,7 @@ public final class HostRecoveryBridge {
     }
 
     public static void handleMessage(HostState state, CharSequence data) {
-        if (data == null || !"RECOVER_HOST".contentEquals(data)) return;
+        if (data == null || (!"RECOVER_HOST".contentEquals(data) && !"RECOVER_HOST_LOCAL".contentEquals(data))) return;
         request(state);
     }
 
