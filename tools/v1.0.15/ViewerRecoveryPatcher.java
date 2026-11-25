@@ -21,6 +21,8 @@ public final class ViewerRecoveryPatcher {
     private static final String APP_JAR = "app/saturn-pc-remote.jar";
     private static final String VIEWER_CLASS = "com/saturn/remote/ViewerWindow.class";
     private static final String BRIDGE = "com/saturn/remote/ViewerRecoveryBridge.class";
+    private static final String LISTENER = "com/saturn/remote/ViewerWindow$connect$1.class";
+    private static final String LISTENER_OWNER = "com/saturn/remote/ViewerWindow$connect$1";
     private static final String OWNER = "com/saturn/remote/ViewerWindow";
     private static final String BRIDGE_OWNER = "com/saturn/remote/ViewerRecoveryBridge";
 
@@ -50,6 +52,34 @@ public final class ViewerRecoveryPatcher {
             insn = next;
         }
         if (!inserted) throw new IllegalStateException("No RETURN in " + method.name);
+    }
+
+    private static void appendRecoveryButtonUpdate(MethodNode method) {
+        boolean found = false;
+        for (var insn = method.instructions.getFirst(); insn != null; ) {
+            var next = insn.getNext();
+            if (insn instanceof MethodInsnNode call && call.owner.equals("javax/swing/JButton")
+                    && call.name.equals("setEnabled") && call.desc.equals("(Z)V")) {
+                InsnList update = new InsnList();
+                update.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                update.add(new MethodInsnNode(Opcodes.INVOKESTATIC, BRIDGE_OWNER, "updateButton",
+                        "(L" + OWNER + ";)V", false));
+                method.instructions.insert(call, update);
+                found = true;
+            }
+            insn = next;
+        }
+        if (!found) throw new IllegalStateException("Recovery button update call not found in " + method.name);
+    }
+
+    private static byte[] patchListener(byte[] input) {
+        ClassNode node = new ClassNode();
+        new ClassReader(input).accept(node, 0);
+        appendRecoveryButtonUpdate(method(node, "onText$lambda$36", "(L" + OWNER + ";)V"));
+        appendRecoveryButtonUpdate(method(node, "onText$lambda$37", "(L" + OWNER + ";)V"));
+        ClassWriter writer = new ClassWriter(0);
+        node.accept(writer);
+        return writer.toByteArray();
     }
 
     private static byte[] patchViewer(byte[] input) {
@@ -91,6 +121,9 @@ public final class ViewerRecoveryPatcher {
                 if (name.equals(VIEWER_CLASS)) {
                     bytes = patchViewer(bytes);
                     seen.add(VIEWER_CLASS);
+                } else if (name.equals(LISTENER)) {
+                    bytes = patchListener(bytes);
+                    seen.add(LISTENER);
                 }
                 if (name.equals(BRIDGE)) throw new IllegalStateException("Viewer Recovery bridge already exists");
                 ZipEntry next = new ZipEntry(name);
@@ -99,7 +132,9 @@ public final class ViewerRecoveryPatcher {
                 zip.write(bytes);
                 zip.closeEntry();
             }
-            if (!seen.contains(VIEWER_CLASS)) throw new IllegalStateException("ViewerWindow.class not found");
+            if (!seen.contains(VIEWER_CLASS) || !seen.contains(LISTENER)) {
+                throw new IllegalStateException("ViewerWindow or its WebSocket listener class not found");
+            }
             zip.putNextEntry(new ZipEntry(BRIDGE));
             zip.write(bridgeBytes);
             zip.closeEntry();
@@ -133,13 +168,17 @@ public final class ViewerRecoveryPatcher {
             try (ZipInputStream nested = new ZipInputStream(check.getInputStream(app))) {
                 boolean bridgeFound = false;
                 boolean viewerFound = false;
+                boolean listenerFound = false;
                 ZipEntry entry;
                 while ((entry = nested.getNextEntry()) != null) {
                     if (entry.getName().equals(BRIDGE)) bridgeFound = true;
                     if (entry.getName().equals(VIEWER_CLASS)) viewerFound = true;
+                    if (entry.getName().equals(LISTENER)) listenerFound = true;
                     while (nested.read(new byte[8192]) >= 0) {}
                 }
-                if (!bridgeFound || !viewerFound) throw new IllegalStateException("Viewer Recovery patch verification failed");
+                if (!bridgeFound || !viewerFound || !listenerFound) {
+                    throw new IllegalStateException("Viewer Recovery patch verification failed");
+                }
             }
         }
     }
