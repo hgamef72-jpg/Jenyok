@@ -60,6 +60,10 @@ test('routes Host, Viewer, Agent, text commands and binary frames', async (t) =>
   assert.equal(info.data.toString(), 'HOST_INFO|host-1|VGVzdCBQQw|2|0|1');
 
   viewer.send('SELECT_HOST|host-1');
+  const selectedAck = await waitForMessage(viewer, (data) => data.toString() === 'HOST_SELECTED|host-1');
+  assert.equal(selectedAck.data.toString(), 'HOST_SELECTED|host-1');
+  const readyAck = await waitForMessage(viewer, (data) => data.toString() === 'HOST_AGENT_READY|1');
+  assert.equal(readyAck.data.toString(), 'HOST_AGENT_READY|1');
   const hostCommand = waitForMessage(host, (data) => data.toString() === 'REMOTE_CONTROL_REQUEST|1');
   viewer.send('REMOTE_CONTROL_REQUEST|1');
   await hostCommand;
@@ -134,4 +138,12 @@ test('routes Host, Viewer, Agent, text commands and binary frames', async (t) =>
   const offlineBackupStatus = waitForMessage(agent, (data) => data.toString() === 'GET_BACKUP_STATUS');
   viewer2.send('GET_BACKUP_STATUS');
   await offlineBackupStatus;
+
+  const agentClosed = new Promise((resolve) => agent.once('close', resolve));
+  agent.close();
+  await agentClosed;
+  const unavailableRecovery = waitForMessage(viewer2, (data) => data.toString().startsWith('RECOVERY_ERROR|'));
+  viewer2.send('RECOVER_HOST');
+  const recoveryError = (await unavailableRecovery).data.toString();
+  assert.equal(Buffer.from(recoveryError.split('|')[1], 'base64url').toString('utf8'), 'Recovery agent is offline');
 });
