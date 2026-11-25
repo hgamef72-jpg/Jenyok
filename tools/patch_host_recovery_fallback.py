@@ -79,13 +79,21 @@ if (-not @@sourceRoot.Equals(@@targetRoot, [StringComparison]::OrdinalIgnoreCase
     New-Item -ItemType Directory -Path @@targetRoot -Force | Out-Null
     & robocopy.exe @@sourceRoot @@targetRoot /MIR /COPY:DAT /DCOPY:DAT /R:1 /W:1 /XJ /NFL /NDL /NJH /NJS
     @@copyExitCode = @@LASTEXITCODE
-    if (@@copyExitCode -ge 8) { throw ("Recovery package copy failed; Robocopy exit code {0}." -f @@copyExitCode) }
+    if (@@copyExitCode -ge 8) {
+        Add-Content -LiteralPath @@log -Value ("{0} WARNING: Recovery package copy failed; Robocopy exit code {1}." -f (Get-Date -Format o), @@copyExitCode)
+    }
 }
 @@recoveryExe = Join-Path @@targetRoot ([System.IO.Path]::GetFileName(@@exe))
-if (-not (Test-Path -LiteralPath @@recoveryExe)) { throw 'Recovery copy is missing its Host executable.' }
-if (-not (Test-Path -LiteralPath (Join-Path @@targetRoot 'app\\saturn-pc-remote.jar'))) { throw 'Recovery copy is missing the application JAR.' }
-if (-not (Test-Path -LiteralPath (Join-Path @@targetRoot 'runtime'))) { throw 'Recovery copy is missing the bundled Java runtime.' }
-Add-Content -LiteralPath @@log -Value ("{0} Verified independent Recovery package: {1}" -f (Get-Date -Format o), @@recoveryRoot)"""
+@@recoveryPackageReady = (
+    (Test-Path -LiteralPath @@recoveryExe) -and
+    (Test-Path -LiteralPath (Join-Path @@targetRoot 'app\\saturn-pc-remote.jar')) -and
+    (Test-Path -LiteralPath (Join-Path @@targetRoot 'runtime'))
+)
+if (@@recoveryPackageReady) {
+    Add-Content -LiteralPath @@log -Value ("{0} Verified independent Recovery package: {1}" -f (Get-Date -Format o), @@recoveryRoot)
+} else {
+    Add-Content -LiteralPath @@log -Value ("{0} WARNING: Recovery copy is incomplete; primary Host restart remains enabled." -f (Get-Date -Format o))
+}"""
 
 def read_class(data: bytes):
     p = 0
