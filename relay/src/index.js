@@ -50,7 +50,7 @@ function safeSend(ws, data, options = {}) {
 function getHostRecord(room, hostId) {
   let host = room.hosts.get(hostId);
   if (!host) {
-    host = { id: hostId, name: 'Remote PC', executable: '', screenCount: 0, online: false, agentReady: false, ws: null, agent: null };
+    host = { id: hostId, name: 'Remote PC', executable: '', screenCount: 0, online: false, agentReady: false, localRecoveryReady: false, ws: null, agent: null };
     room.hosts.set(hostId, host);
   }
   return host;
@@ -64,7 +64,7 @@ function resolveHostId(viewer) {
 
 function hostInfo(host) {
   const name = Buffer.from(host.name || 'Remote PC', 'utf8').toString('base64url');
-  return `HOST_INFO|${host.id}|${name}|${host.screenCount}|${host.online ? '1' : '0'}|${host.agentReady ? '1' : '0'}`;
+  return `HOST_INFO|${host.id}|${name}|${host.screenCount}|${host.online ? '1' : '0'}|${(host.agentReady || host.localRecoveryReady) ? '1' : '0'}`;
 }
 
 function sendHostList(viewer) {
@@ -100,15 +100,18 @@ function sendToHost(viewer, data, binary = false) {
   if (data === 'RECOVER_HOST') {
     if (host.agent?.readyState === WebSocket.OPEN) {
       safeSend(host.agent, data, { binary });
+    } else if (host.localRecoveryReady && host.ws?.readyState === WebSocket.OPEN) {
+      // The Host can hand the request to its local watchdog when the network Agent is offline.
+      safeSend(host.ws, data, { binary });
     } else {
-      const detail = Buffer.from('Recovery agent is offline', 'utf8').toString('base64url');
+      const detail = Buffer.from('Local recovery supervisor is unavailable', 'utf8').toString('base64url');
       safeSend(viewer, 'RECOVERY_ERROR|' + detail);
     }
     return;
   }
   if (data === 'GET_AGENT_STATUS') {
     if (host.agent?.readyState === WebSocket.OPEN) safeSend(host.agent, data, { binary });
-    else safeSend(viewer, 'HOST_AGENT_READY|0');
+    else safeSend(viewer, 'HOST_AGENT_READY|' + (host.localRecoveryReady ? '1' : '0'));
     return;
   }
   if (host.ws?.readyState === WebSocket.OPEN) {
@@ -140,6 +143,7 @@ function cleanup(ws) {
       if (ws.role === 'host' && host.ws === ws) {
         host.ws = null;
         host.online = false;
+        host.localRecoveryReady = false;
         host.screenCount = 0;
         forwardToSelectedViewers(host, 'HOST_SESSION_STATUS|0');
       } else if (ws.role === 'agent' && host.agent === ws) {
@@ -173,6 +177,9 @@ function updateHostState(host, message) {
     case 'HOST_AGENT_READY':
       host.agentReady = parts[1] === '1';
       break;
+    case 'HOST_RECOVERY_READY':
+      host.localRecoveryReady = parts[1] === '1';
+      break;
   }
 }
 
@@ -186,7 +193,7 @@ function routeText(ws, text) {
     const host = ws.roomState.hosts.get(ws.hostId);
     if (!host || (ws.role === 'host' ? host.ws !== ws : host.agent !== ws)) return;
     updateHostState(host, text);
-    if (/^(SCREEN_COUNT|HOST_IDENTITY|HOST_SESSION_STATUS|HOST_AGENT_READY)\|/.test(text)) notifyHostList(ws.roomState);
+    if (/^(SCREEN_COUNT|HOST_IDENTITY|HOST_SESSION_STATUS|HOST_AGENT_READY|HOST_RECOVERY_READY)\|/.test(text)) notifyHostList(ws.roomState);
     forwardToSelectedViewers(host, text);
     return;
   }
@@ -206,7 +213,7 @@ function routeText(ws, text) {
     }
     // Complete the selection handshake expected by both desktop and Android Viewers.
     safeSend(ws, 'HOST_SELECTED|' + hostId);
-    safeSend(ws, 'HOST_AGENT_READY|' + (host.agent?.readyState === WebSocket.OPEN ? '1' : '0'));
+    safeSend(ws, 'HOST_AGENT_READY|' + (host.agent?.readyState === WebSocket.OPEN || host.localRecoveryReady ? '1' : '0'));
     if (host.ws?.readyState === WebSocket.OPEN) safeSend(host.ws, 'GET_HOST_STATUS');
     else if (host.agent?.readyState === WebSocket.OPEN) safeSend(host.agent, 'GET_HOST_STATUS');
     else safeSend(ws, 'HOST_SESSION_STATUS|0');
@@ -268,6 +275,7 @@ server.on('upgrade', (req, socket, head) => {
         if (host.ws && host.ws !== ws) host.ws.close(4001, 'Host reconnected');
         host.ws = ws;
         host.online = true;
+        host.localRecoveryReady = false;
       } else {
         if (host.agent && host.agent !== ws) host.agent.close(4001, 'Agent reconnected');
         host.agent = ws;
