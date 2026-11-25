@@ -163,6 +163,29 @@ def patch_class(data: bytes) -> bytes:
         if t.count(marker) != 1:
             raise ValueError("Installer work directory insertion point changed")
         t = t.replace(marker, INSTALL_INSERT, 1)
+
+    # Do not require elevation for the Host's own first-run recovery setup.
+    # The original installer additionally registered an AtStartup task with an
+    # interactive principal and a BUILTIN\Users group task. Those machine-wide
+    # registrations can fail for a standard user and abort the whole installer.
+    # The per-user AtLogOn task and HKCU Run entry are already registered above.
+    start_marker = "# Keep the known-good interactive AtLogOn task independent from the boot trigger."
+    end_marker = "    # Upgrade an already-running supervisor in place without removing"
+    start = t.find(start_marker)
+    end = t.find(end_marker, start + len(start_marker)) if start >= 0 else -1
+    if start >= 0:
+        if end < 0:
+            raise ValueError("Installer task block end marker changed")
+        t = t[:start] + "# Per-user AtLogOn recovery is registered above; no elevated machine-wide task is required.\n" + t[end:]
+    if "for (@@attempt = 0; @@attempt -lt 15; @@attempt++)" in t:
+        t = t.replace("for (@@attempt = 0; @@attempt -lt 15; @@attempt++)",
+                      "for (@@attempt = 0; @@attempt -lt 30; @@attempt++)", 1)
+    t = t.replace(
+        "SUCCESS: Separate AtStartup recovery task enabled for {0}; action={1}",
+        "SUCCESS: Current-user AtLogOn recovery task enabled for {0}; action={1}",
+    )
+    t = t.replace("@@startupRegistered.Actions[0].Execute", "@@registered.Actions[0].Execute")
+    if t != installer[0]["value"]:
         replacements.append((installer[0], t))
 
     if not replacements:
