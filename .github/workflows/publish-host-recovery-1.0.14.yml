@@ -54,10 +54,10 @@ jobs:
                   cls = jar.read("com/saturn/remote/AppsKt.class")
                   if b"Verified independent Recovery package:" not in cls:
                       raise SystemExit("Automatic recovery installer patch is missing")
-                  if b"Current-user AtLogOn recovery task enabled" not in cls:
-                      raise SystemExit("Standard-user task registration patch is missing")
-                  if b"BUILTIN\\Users" in cls:
-                      raise SystemExit("Machine-wide Users task registration was not removed")
+                  if b"ANY_USER_TASK_UAC_V1" not in cls or b"Roblox12311 - Any User Logon" not in cls:
+                      raise SystemExit("Any-user AtLogOn task registration patch is missing")
+                  if b"BUILTIN\\Users" not in cls or b"Start-Process -FilePath (Join-Path $PSHOME 'powershell.exe') -Verb RunAs" not in cls:
+                      raise SystemExit("Elevated all-users task registration is missing")
           print(f"Verified automatic-start Host package: {archive.stat().st_size} bytes")
           PY
 
