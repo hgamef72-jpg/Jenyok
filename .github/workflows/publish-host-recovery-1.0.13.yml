@@ -1,0 +1,107 @@
+name: Publish Jenyok 1.0.13 Host Recovery Fix
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/publish-host-recovery-1.0.13.yml"
+      - "tools/Install-Recovery.ps1"
+      - "tools/Recovery-Watchdog.ps1"
+      - "tools/patch_host_recovery_fallback.py"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download verified RC2 baseline assets
+        env:
+          GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p input output
+          gh release download v1.0.12-rc2 --repo "$GITHUB_REPOSITORY" --pattern "Roblox12311-1.5.77.zip" --dir input
+          gh release download v1.0.12-rc2 --repo "$GITHUB_REPOSITORY" --pattern "Viewer-1.5.77.zip" --dir output
+          gh release download v1.0.12-rc2 --repo "$GITHUB_REPOSITORY" --pattern "Viewer-1.0.12.apk" --dir output
+
+      - name: Patch Host fallback and add independent installer
+        run: |
+          python tools/patch_host_recovery_fallback.py input/Roblox12311-1.5.77.zip output/Roblox12311-1.5.77.zip
+          python - <<'PY'
+          import pathlib
+          import zipfile
+
+          archive = pathlib.Path("output/Roblox12311-1.5.77.zip")
+          additions = {
+              "Install-Recovery.ps1": pathlib.Path("tools/Install-Recovery.ps1"),
+              "Recovery-Watchdog.ps1": pathlib.Path("tools/Recovery-Watchdog.ps1"),
+              "Install-Recovery.cmd": None,
+          }
+          launcher = (
+              "@echo off\r\n"
+              "setlocal\r\n"
+              "powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File \"%~dp0Install-Recovery.ps1\"\r\n"
+              "if errorlevel 1 (\r\n"
+              "  echo.\r\n"
+              "  echo Recovery installation failed. See the error above.\r\n"
+              "  pause\r\n"
+              "  exit /b 1\r\n"
+              ")\r\n"
+              "echo.\r\n"
+              "pause\r\n"
+          )
+          with zipfile.ZipFile(archive, "a", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as z:
+              names = set(z.namelist())
+              for name, source in additions.items():
+                  if name in names:
+                      raise SystemExit(f"Refusing to overwrite existing package entry: {name}")
+                  payload = launcher.encode("utf-8") if source is None else source.read_bytes()
+                  z.writestr(name, payload)
+          with zipfile.ZipFile(archive) as z:
+              bad = z.testzip()
+              if bad:
+                  raise SystemExit(f"ZIP integrity failure: {bad}")
+              required = {"Roblox12311.exe", "app/saturn-pc-remote.jar", "runtime/release",
+                          "Install-Recovery.cmd", "Install-Recovery.ps1", "Recovery-Watchdog.ps1"}
+              missing = required - set(z.namelist())
+              if missing:
+                  raise SystemExit(f"Missing required package entries: {sorted(missing)}")
+          print(f"Final Host package verified: {archive.stat().st_size} bytes")
+          PY
+
+      - name: Publish release v1.0.13
+        env:
+          GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NOTES=$(cat <<'EOF'
+          Jenyok 1.0.13 — Independent Host Recovery
+
+          - Adds an explicit one-time Install-Recovery.cmd bootstrapper, so recovery does not depend on the Host successfully completing its own startup.
+          - Installs a per-user Windows AtLogOn scheduled task.
+          - Copies the complete Host package to %LOCALAPPDATA%\\Jenyok\\Recovery\\Host.
+          - Runs an independent watchdog that starts the Host if it is not running and retries after failed starts.
+          - Preserves the RC2 relay, Viewer and Android assets; Android is unchanged.
+
+          Installation:
+          1. Extract Roblox12311-1.5.77.zip to a writable folder.
+          2. Run Install-Recovery.cmd once.
+          3. The installer registers the recovery task for the current Windows user and starts it immediately.
+          4. Check %LOCALAPPDATA%\\Jenyok\\Recovery\\watchdog.log if startup still fails.
+
+          Validation:
+          - Host patcher checks the audited bytecode and embedded PowerShell templates.
+          - Nested JAR and final ZIP integrity checks run in CI.
+          - This build has not been executed on a physical Windows host; successful runtime recovery is not claimed.
+          EOF
+          )
+          if gh release view v1.0.13 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload v1.0.13 output/* --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit v1.0.13 --repo "$GITHUB_REPOSITORY" --title "Jenyok 1.0.13 — Independent Host Recovery" --notes "$NOTES" --draft=false --prerelease=false
+          else
+            gh release create v1.0.13 output/* --repo "$GITHUB_REPOSITORY" --title "Jenyok 1.0.13 — Independent Host Recovery" --notes "$NOTES"
+          fi
