@@ -40,4 +40,4 @@ jobs:
             fi
             sleep 5
           done
-          node test/deployed-smoke.js
+          node scripts/deployed-smoke.js
