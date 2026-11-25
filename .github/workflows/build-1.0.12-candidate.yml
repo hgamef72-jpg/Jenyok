@@ -11,6 +11,7 @@ on:
       - "tools/StreamPacer.java"
       - "tools/FrameRenderer.java"
       - "tools/patch_windows_recovery.py"
+      - "tools/patch_host_recovery_fallback.py"
       - "android-viewer/**"
       - ".github/workflows/build-1.0.12-candidate.yml"
   pull_request:
@@ -57,8 +58,9 @@ jobs:
             host input/Roblox12311-1.5.77.zip dist/host-stream.zip \
             tools/classes/com/saturn/remote/StreamPacer.class
           python tools/patch_windows_recovery.py dist/host-stream.zip dist/host-recovery.zip
+          python tools/patch_host_recovery_fallback.py dist/host-recovery.zip dist/host-recovery-fallback.zip
           java -cp "tools/classes:input/asm.jar:input/asm-tree.jar" RelayEndpointPatcher \
-            dist/host-recovery.zip dist/Roblox12311-1.5.77.zip \
+            dist/host-recovery-fallback.zip dist/Roblox12311-1.5.77.zip \
             wss://jenyok-relay-rebuilt.onrender.com/connect
 
       - name: Patch Windows Viewer stream and relay endpoint
@@ -111,17 +113,17 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="v1.0.12-rc1"
+          TAG="v1.0.12-rc2"
           ASSETS=(dist/Roblox12311-1.5.77.zip dist/Viewer-1.5.77.zip dist/Viewer-1.0.12.apk)
           NOTES="$(cat <<'EOF'
-          Jenyok 1.0.12 — Release Candidate 1
+          Jenyok 1.0.12 — Release Candidate 2
 
           - Rebuilt the WebSocket Relay from the recovered Host, Viewer and Recovery Agent protocol.
           - Added room/host/agent routing, binary screen-frame forwarding, heartbeat cleanup, bounded message sizes and slow-consumer backpressure.
           - Migrated Android Viewer and Windows Host/Viewer packages to the new Relay endpoint:
             wss://jenyok-relay-rebuilt.onrender.com/connect
           - Preserved Windows Remote Control and Block Host Input request/status/heartbeat routing to the Host.
-          - Windows packages include the existing stream pacing/render patches and a migration fallback for saved settings that still point to the old Relay.
+          - Windows Host now installs a verified full-package Recovery copy under %LOCALAPPDATA%\\Jenyok\\Recovery\\Host and tries it if the primary package cannot start.\n          - Recovery supervisor logs each primary/fallback launch attempt; the copy includes the app JAR, bundled runtime and resources.
           - Android Viewer version 1.0.12.
 
           Validation:
