@@ -194,7 +194,11 @@ function routeText(ws, text) {
     if (!host || (ws.role === 'host' ? host.ws !== ws : host.agent !== ws)) return;
     updateHostState(host, text);
     if (/^(SCREEN_COUNT|HOST_IDENTITY|HOST_SESSION_STATUS|HOST_AGENT_READY|HOST_RECOVERY_READY)\|/.test(text)) notifyHostList(ws.roomState);
-    forwardToSelectedViewers(host, text);
+    if (text.startsWith('HOST_RECOVERY_READY|')) {
+      forwardToSelectedViewers(host, 'HOST_AGENT_READY|' + (host.agent?.readyState === WebSocket.OPEN || host.localRecoveryReady ? '1' : '0'));
+    } else {
+      forwardToSelectedViewers(host, text);
+    }
     return;
   }
 
