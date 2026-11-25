@@ -56,7 +56,7 @@ jobs:
                       raise SystemExit("Automatic recovery installer patch is missing")
                   if b"Current-user AtLogOn recovery task enabled" not in cls:
                       raise SystemExit("Standard-user task registration patch is missing")
-                  if b"BUILTIN\\\\Users" in cls:
+                  if b"BUILTIN\\Users" in cls:
                       raise SystemExit("Machine-wide Users task registration was not removed")
           print(f"Verified automatic-start Host package: {archive.stat().st_size} bytes")
           PY
