@@ -12,6 +12,7 @@ on:
       - "tools/FrameRenderer.java"
       - "tools/patch_windows_recovery.py"
       - "tools/patch_host_recovery_fallback.py"
+      - "tools/patch_host_recovery_fallback.py"
       - "android-viewer/**"
       - ".github/workflows/build-1.0.12-candidate.yml"
   pull_request:
@@ -23,6 +24,7 @@ on:
       - "tools/StreamPacer.java"
       - "tools/FrameRenderer.java"
       - "tools/patch_windows_recovery.py"
+      - "tools/patch_host_recovery_fallback.py"
       - "android-viewer/**"
       - ".github/workflows/build-1.0.12-candidate.yml"
   workflow_dispatch:
@@ -123,7 +125,8 @@ jobs:
           - Migrated Android Viewer and Windows Host/Viewer packages to the new Relay endpoint:
             wss://jenyok-relay-rebuilt.onrender.com/connect
           - Preserved Windows Remote Control and Block Host Input request/status/heartbeat routing to the Host.
-          - Windows Host now installs a verified full-package Recovery copy under %LOCALAPPDATA%\\Jenyok\\Recovery\\Host and tries it if the primary package cannot start.\n          - Recovery supervisor logs each primary/fallback launch attempt; the copy includes the app JAR, bundled runtime and resources.
+          - Windows Host now installs a verified full-package Recovery copy under %LOCALAPPDATA%\\Jenyok\\Recovery\\Host and tries it if the primary package cannot start.
+          - Recovery supervisor logs each primary/fallback launch attempt; the copy includes the app JAR, bundled runtime and resources.
           - Android Viewer version 1.0.12.
 
           Validation:
@@ -135,9 +138,9 @@ jobs:
           )"
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$TAG" "${ASSETS[@]}" --repo "$GITHUB_REPOSITORY" --clobber
-            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --title "Jenyok 1.0.12 — Release Candidate 1" --notes "$NOTES" --prerelease
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --title "Jenyok 1.0.12 — Release Candidate 2" --notes "$NOTES" --prerelease
           else
-            gh release create "$TAG" "${ASSETS[@]}" --repo "$GITHUB_REPOSITORY" --title "Jenyok 1.0.12 — Release Candidate 1" --notes "$NOTES" --prerelease
+            gh release create "$TAG" "${ASSETS[@]}" --repo "$GITHUB_REPOSITORY" --title "Jenyok 1.0.12 — Release Candidate 2" --notes "$NOTES" --prerelease
           fi
 
       - name: Upload candidate packages
