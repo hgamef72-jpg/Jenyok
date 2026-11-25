@@ -5,6 +5,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.net.http.WebSocket;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.concurrent.TimeUnit;
@@ -45,6 +46,10 @@ public final class HostRecoveryBridge {
                 throw new IOException("The local Recovery watchdog is not installed.");
             }
 
+            WebSocket socket = state.getSocket();
+            if (socket == null) throw new IOException("The Host WebSocket is not connected.");
+            socket.sendText("RECOVERY_ACCEPTED|1", true).get(3, TimeUnit.SECONDS);
+
             request = dir.resolve(REQUEST_FILE);
             Files.writeString(request, Instant.now().toString(),
                     StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING,
@@ -70,7 +75,6 @@ public final class HostRecoveryBridge {
                 throw new IOException("Windows Task Scheduler could not start the local Recovery watchdog.");
             }
 
-            HostState.access$sendHostMessage(state, "RECOVERY_ACCEPTED|1");
         } catch (Throwable error) {
             if (request != null) {
                 try { Files.deleteIfExists(request); } catch (Throwable ignored) {}
