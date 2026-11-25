@@ -36,8 +36,10 @@ jobs:
           curl -fsSL https://repo.maven.apache.org/maven2/org/ow2/asm/asm/9.7.1/asm-9.7.1.jar -o input/asm.jar
           curl -fsSL https://repo.maven.apache.org/maven2/org/ow2/asm/asm-tree/9.7.1/asm-tree-9.7.1.jar -o input/asm-tree.jar
           javac --release 17 -cp "input/host-app.jar" -d tools/classes tools/v1.0.15/HostRecoveryBridge.java
+          javac --release 17 -cp "input/viewer-app.jar" -d tools/classes tools/v1.0.15/ViewerRecoveryBridge.java
           javac --release 17 -cp "input/viewer-app.jar" -d tools/classes tools/v1.0.15/FrameRenderer.java
           javac --release 17 -cp "input/asm.jar:input/asm-tree.jar:input/host-app.jar" -d tools/classes tools/v1.0.15/HostRecoveryPatcher.java
+          javac --release 17 -cp "input/asm.jar:input/asm-tree.jar:input/viewer-app.jar" -d tools/classes tools/v1.0.15/ViewerRecoveryPatcher.java
           javac --release 17 -cp "tools/classes:input/viewer-app.jar" -d tools/classes tools/v1.0.15/FrameRendererTest.java
           java -Djava.awt.headless=true -cp "tools/classes:input/viewer-app.jar" com.saturn.remote.FrameRendererTest
 
@@ -49,9 +51,13 @@ jobs:
 
       - name: Patch Viewer renderer and validate packages
         run: |
+          java -cp "tools/classes:input/asm.jar:input/asm-tree.jar:input/viewer-app.jar" ViewerRecoveryPatcher \
+            input/Viewer-1.5.77.zip output/viewer-recovery.zip \
+            tools/classes/com/saturn/remote/ViewerRecoveryBridge.class
           python tools/v1.0.15/patch_viewer_renderer.py \
-            input/Viewer-1.5.77.zip output/Viewer-1.5.77.zip \
+            output/viewer-recovery.zip output/Viewer-1.5.77.zip \
             tools/classes/com/saturn/remote/FrameRenderer.class
+          rm output/viewer-recovery.zip
           python - <<'PY'
           import io
           import pathlib
@@ -82,11 +88,17 @@ jobs:
                               raise SystemExit("Host listener does not call local Recovery bridge")
                       else:
                           renderer = "com/saturn/remote/FrameRenderer.class"
+                          recovery_bridge = "com/saturn/remote/ViewerRecoveryBridge.class"
+                          viewer_class = "com/saturn/remote/ViewerWindow.class"
                           listener = "com/saturn/remote/ViewerWindow$connect$1.class"
-                          if renderer not in names or listener not in names:
-                              raise SystemExit("Viewer frame renderer injection is missing")
+                          if renderer not in names or recovery_bridge not in names or viewer_class not in names or listener not in names:
+                              raise SystemExit("Viewer Recovery/stream helper injection is missing")
                           if b"FrameRenderer" not in jar.read(listener):
                               raise SystemExit("Viewer listener is not wired to FrameRenderer")
+                          if b"ViewerRecoveryBridge" not in jar.read(viewer_class):
+                              raise SystemExit("Viewer Recovery button is not wired to local fallback")
+                          if b"RECOVER_HOST_LOCAL" not in jar.read(recovery_bridge):
+                              raise SystemExit("Viewer local Recovery command is missing")
                           renderer_bytes = jar.read(renderer)
                           if b"viewer-stream.log" not in renderer_bytes:
                               raise SystemExit("Viewer stream diagnostics are missing")
@@ -103,9 +115,9 @@ jobs:
           Jenyok 1.0.15 — Local Recovery Fallback and PC Viewer Diagnostics
 
           Recovery:
-          - The Host now advertises local watchdog readiness independently of the network Recovery Agent.
-          - If the network Agent is offline but the Host is online, Relay forwards RECOVER_HOST to the Host.
+          - The PC Viewer now uses RECOVER_HOST_LOCAL whenever the Host session is online, so local Recovery does not depend on the network Agent or a Relay update.
           - Host writes the existing local watchdog request marker and starts the registered Recovery task if it is not already running.
+          - If the Host is offline, the Viewer can still use the network Agent when it is online.
           - The existing watchdog restarts the primary Host executable; this path does not restore backups.
           - If both Host and network Agent are offline, a remote command cannot be delivered. The local watchdog still restarts a crashed Host automatically.
 
