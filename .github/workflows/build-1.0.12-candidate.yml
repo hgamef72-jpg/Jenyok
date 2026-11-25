@@ -44,8 +44,8 @@ jobs:
 
       - name: Prepare ASM and compile patchers
         run: |
-          curl -fsSL https://repo.maven.apache.org/maven2/org/ow2/asm/asm/9.7.1/asm-9.7.1.jar -o input/asm.jar
-          curl -fsSL https://repo.maven.apache.org/maven2/org/ow2/asm/asm-tree/9.7.1/asm-tree-9.7.1.jar -o input/asm-tree.jar
+          curl --retry 8 --retry-all-errors --retry-delay 5 --retry-max-time 120 -fsSL https://repo.maven.apache.org/maven2/org/ow2/asm/asm/9.7.1/asm-9.7.1.jar -o input/asm.jar
+          curl --retry 8 --retry-all-errors --retry-delay 5 --retry-max-time 120 -fsSL https://repo.maven.apache.org/maven2/org/ow2/asm/asm-tree/9.7.1/asm-tree-9.7.1.jar -o input/asm-tree.jar
           unzip -p input/Viewer-1.5.77.zip app/saturn-pc-remote.jar > input/viewer-app.jar
           javac --release 17 -cp "input/asm.jar:input/asm-tree.jar:input/viewer-app.jar" -d tools/classes \
             tools/JenyokStreamPatcher.java tools/StreamPacer.java tools/FrameRenderer.java tools/RelayEndpointPatcher.java
