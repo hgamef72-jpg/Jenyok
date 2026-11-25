@@ -1,0 +1,97 @@
+name: Publish Jenyok 1.0.14 Automatic Host Recovery
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/publish-host-recovery-1.0.14.yml"
+      - "tools/patch_host_recovery_fallback.py"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download RC2 baseline assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p input output
+          gh release download v1.0.12-rc2 --repo "$GITHUB_REPOSITORY" --pattern "Roblox12311-1.5.77.zip" --dir input
+          gh release download v1.0.12-rc2 --repo "$GITHUB_REPOSITORY" --pattern "Viewer-1.5.77.zip" --dir output
+          gh release download v1.0.12-rc2 --repo "$GITHUB_REPOSITORY" --pattern "Viewer-1.0.12.apk" --dir output
+
+      - name: Patch Host startup recovery in the executable's embedded app
+        run: |
+          python tools/patch_host_recovery_fallback.py input/Roblox12311-1.5.77.zip output/Roblox12311-1.5.77.zip
+          python - <<'PY'
+          import io
+          import pathlib
+          import zipfile
+
+          archive = pathlib.Path("output/Roblox12311-1.5.77.zip")
+          with zipfile.ZipFile(archive) as z:
+              bad = z.testzip()
+              if bad:
+                  raise SystemExit(f"ZIP integrity failure: {bad}")
+              names = set(z.namelist())
+              required = {"Roblox12311.exe", "app/saturn-pc-remote.jar", "runtime/release"}
+              missing = required - names
+              if missing:
+                  raise SystemExit(f"Missing required Host entries: {sorted(missing)}")
+              if any(name.lower().endswith(("install-recovery.cmd", "install-recovery.ps1")) for name in names):
+                  raise SystemExit("Standalone recovery installer unexpectedly exists in Host package")
+              jar_data = z.read("app/saturn-pc-remote.jar")
+              with zipfile.ZipFile(io.BytesIO(jar_data)) as jar:
+                  if jar.testzip() is not None:
+                      raise SystemExit("Nested app JAR integrity failure")
+                  cls = jar.read("com/saturn/remote/AppsKt.class")
+                  if b"Verified independent Recovery package:" not in cls:
+                      raise SystemExit("Automatic recovery installer patch is missing")
+                  if b"Current-user AtLogOn recovery task enabled" not in cls:
+                      raise SystemExit("Standard-user task registration patch is missing")
+                  if b"BUILTIN\\\\Users" in cls:
+                      raise SystemExit("Machine-wide Users task registration was not removed")
+          print(f"Verified automatic-start Host package: {archive.stat().st_size} bytes")
+          PY
+
+      - name: Publish release v1.0.14
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NOTES=$(cat <<'EOF'
+          Jenyok 1.0.14 — Automatic Host Recovery
+
+          - Recovery setup is performed automatically by Roblox12311.exe during normal startup.
+          - No separate BAT/CMD/PowerShell installer is required.
+          - Uses the current Windows user's AtLogOn task and HKCU Run entry, avoiding machine-wide task registration that can fail without elevation.
+          - Copies the full Host package to %LOCALAPPDATA%\\Jenyok\\Recovery\\Host and lets the embedded watchdog restart it if it exits.
+          - Increases the startup wait window for the watchdog agent.
+          - Viewer and Android assets are carried forward unchanged from RC2.
+
+          Installation:
+          1. Extract Roblox12311-1.5.77.zip.
+          2. Run Roblox12311.exe normally.
+          3. Recovery registration and watchdog startup happen automatically.
+
+          Diagnostics:
+          %USERPROFILE%\\.saturn-pc-remote\\host-recovery-install.log
+          %USERPROFILE%\\.saturn-pc-remote\\host-recovery.log
+
+          Validation:
+          - CI validates the patched JVM class, nested JAR and final ZIP.
+          - This package has not been executed on a physical Windows machine; runtime recovery still requires on-device confirmation.
+          EOF
+          )
+          if gh release view v1.0.14 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload v1.0.14 output/* --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit v1.0.14 --repo "$GITHUB_REPOSITORY" --title "Jenyok 1.0.14 — Automatic Host Recovery" --notes "$NOTES" --draft=false --prerelease=false
+          else
+            gh release create v1.0.14 output/* --repo "$GITHUB_REPOSITORY" --title "Jenyok 1.0.14 — Automatic Host Recovery" --notes "$NOTES"
+          fi
