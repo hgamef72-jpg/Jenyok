@@ -75,7 +75,13 @@ INSTALL_INSERT = """@@workDir = EXPR_WORKDIR
 @@recoveryRoot = Join-Path $env:LOCALAPPDATA 'Jenyok\\Recovery\\Host'
 @@sourceRoot = [System.IO.Path]::GetFullPath(@@workDir)
 @@targetRoot = [System.IO.Path]::GetFullPath(@@recoveryRoot)
-if (-not @@sourceRoot.Equals(@@targetRoot, [StringComparison]::OrdinalIgnoreCase)) {
+@@recoveryExe = Join-Path @@targetRoot ([System.IO.Path]::GetFileName(@@exe))
+@@recoveryPackageReady = (
+    (Test-Path -LiteralPath @@recoveryExe) -and
+    (Test-Path -LiteralPath (Join-Path @@targetRoot 'app\\saturn-pc-remote.jar')) -and
+    (Test-Path -LiteralPath (Join-Path @@targetRoot 'runtime'))
+)
+if (-not @@recoveryPackageReady -and -not @@sourceRoot.Equals(@@targetRoot, [StringComparison]::OrdinalIgnoreCase)) {
     New-Item -ItemType Directory -Path @@targetRoot -Force | Out-Null
     & robocopy.exe @@sourceRoot @@targetRoot /MIR /COPY:DAT /DCOPY:DAT /R:1 /W:1 /XJ /NFL /NDL /NJH /NJS
     @@copyExitCode = @@LASTEXITCODE
@@ -83,7 +89,6 @@ if (-not @@sourceRoot.Equals(@@targetRoot, [StringComparison]::OrdinalIgnoreCase
         Add-Content -LiteralPath @@log -Value ("{0} WARNING: Recovery package copy failed; Robocopy exit code {1}." -f (Get-Date -Format o), @@copyExitCode)
     }
 }
-@@recoveryExe = Join-Path @@targetRoot ([System.IO.Path]::GetFileName(@@exe))
 @@recoveryPackageReady = (
     (Test-Path -LiteralPath @@recoveryExe) -and
     (Test-Path -LiteralPath (Join-Path @@targetRoot 'app\\saturn-pc-remote.jar')) -and
