@@ -87,7 +87,14 @@ function sendToHost(viewer, data, binary = false) {
   const hostId = resolveHostId(viewer);
   const host = hostId ? viewer.roomState.hosts.get(hostId) : null;
   if (!host) {
-    safeSend(viewer, 'HOST_SESSION_STATUS|0');
+    if (data === 'RECOVER_HOST') {
+      const detail = Buffer.from('Host or Recovery agent is offline', 'utf8').toString('base64url');
+      safeSend(viewer, 'RECOVERY_ERROR|' + detail);
+    } else if (data === 'GET_AGENT_STATUS') {
+      safeSend(viewer, 'HOST_AGENT_READY|0');
+    } else {
+      safeSend(viewer, 'HOST_SESSION_STATUS|0');
+    }
     return;
   }
   if (data === 'RECOVER_HOST') {
