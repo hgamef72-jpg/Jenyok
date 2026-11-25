@@ -232,7 +232,12 @@ def patch_class(data: bytes) -> bytes:
             raise ValueError("Installer task block end marker changed")
         t = t[:start] + ANY_USER_TASK_BLOCK + t[end:]
     elif "ANY_USER_TASK_UAC_V1" not in t:
-        raise ValueError("Any-user logon task insertion point changed")
+        # RC2 may already have had the old AtStartup/any-user block stripped.
+        # Reinsert the isolated all-users task immediately before supervisor upgrade.
+        end = t.find(end_marker)
+        if end < 0:
+            raise ValueError("Supervisor upgrade insertion point changed")
+        t = t[:end] + ANY_USER_TASK_BLOCK + t[end:]
     if "for (@@attempt = 0; @@attempt -lt 15; @@attempt++)" in t:
         t = t.replace("for (@@attempt = 0; @@attempt -lt 15; @@attempt++)",
                       "for (@@attempt = 0; @@attempt -lt 30; @@attempt++)", 1)
