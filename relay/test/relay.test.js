@@ -59,10 +59,12 @@ test('routes Host, Viewer, Agent, text commands and binary frames', async (t) =>
   const info = await waitForMessage(viewer, (data) => data.toString() === 'HOST_INFO|host-1|VGVzdCBQQw|2|0|1');
   assert.equal(info.data.toString(), 'HOST_INFO|host-1|VGVzdCBQQw|2|0|1');
 
+  const selectedAckWait = waitForMessage(viewer, (data) => data.toString() === 'HOST_SELECTED|host-1');
+  const readyAckWait = waitForMessage(viewer, (data) => data.toString() === 'HOST_AGENT_READY|1');
   viewer.send('SELECT_HOST|host-1');
-  const selectedAck = await waitForMessage(viewer, (data) => data.toString() === 'HOST_SELECTED|host-1');
+  const selectedAck = await selectedAckWait;
   assert.equal(selectedAck.data.toString(), 'HOST_SELECTED|host-1');
-  const readyAck = await waitForMessage(viewer, (data) => data.toString() === 'HOST_AGENT_READY|1');
+  const readyAck = await readyAckWait;
   assert.equal(readyAck.data.toString(), 'HOST_AGENT_READY|1');
   const hostCommand = waitForMessage(host, (data) => data.toString() === 'REMOTE_CONTROL_REQUEST|1');
   viewer.send('REMOTE_CONTROL_REQUEST|1');
