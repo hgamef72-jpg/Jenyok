@@ -56,8 +56,8 @@ jobs:
                       raise SystemExit("Automatic recovery installer patch is missing")
                   if b"ANY_USER_TASK_NO_UAC_V2" not in cls or b"Roblox12311 - Any User Logon" not in cls:
                       raise SystemExit("Any-user AtLogOn task registration patch is missing")
-                  if b"BUILTIN\\Users" not in cls or b"ANY_USER_TASK_NO_UAC_V2" not in cls:
-                      raise SystemExit("Elevated all-users task registration is missing")
+                  if b"BUILTIN\\Users" not in cls or b"Register-ScheduledTask" not in cls or b"HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" not in cls:
+                    raise SystemExit("No-UAC all-users attempt or current-user fallback is missing")
           print(f"Verified automatic-start Host package: {archive.stat().st_size} bytes")
           PY
 
