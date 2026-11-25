@@ -19,7 +19,7 @@ public final class HostRecoveryBridge {
     public static void advertiseReady(HostState state) {
         boolean ready = false;
         try {
-            Path dir = AppsKt.access$configDir();
+            Path dir = configDir();
             Path version = dir.resolve("host-recovery-agent.version");
             Path supervisor = dir.resolve("host-recovery-supervisor.ps1");
             ready = Files.isRegularFile(version) && Files.size(version) > 0
@@ -27,7 +27,7 @@ public final class HostRecoveryBridge {
         } catch (Throwable ignored) {
             // A missing local watchdog is reported as not ready.
         }
-        HostState.access$sendHostMessage(state, "HOST_RECOVERY_READY|" + (ready ? "1" : "0"));
+        sendMessage(state, "HOST_RECOVERY_READY|" + (ready ? "1" : "0"));
     }
 
     public static void handleMessage(HostState state, CharSequence data) {
@@ -35,10 +35,21 @@ public final class HostRecoveryBridge {
         request(state);
     }
 
+    private static Path configDir() {
+        return Path.of(System.getProperty("user.home"), ".saturn-pc-remote");
+    }
+
+    private static void sendMessage(HostState state, String message) {
+        try {
+            WebSocket socket = state.getSocket();
+            if (socket != null) socket.sendText(message, true);
+        } catch (Throwable ignored) {}
+    }
+
     private static void request(HostState state) {
         Path request = null;
         try {
-            Path dir = AppsKt.access$configDir();
+            Path dir = configDir();
             Path version = dir.resolve("host-recovery-agent.version");
             Path supervisor = dir.resolve("host-recovery-supervisor.ps1");
             if (!Files.isRegularFile(version) || Files.size(version) == 0
@@ -83,7 +94,7 @@ public final class HostRecoveryBridge {
             if (detail == null || detail.isBlank()) detail = error.getClass().getSimpleName();
             String encoded = Base64.getUrlEncoder().withoutPadding()
                     .encodeToString(detail.getBytes(StandardCharsets.UTF_8));
-            HostState.access$sendHostMessage(state, "RECOVERY_ERROR|" + encoded);
+            sendMessage(state, "RECOVERY_ERROR|" + encoded);
         }
     }
 }
