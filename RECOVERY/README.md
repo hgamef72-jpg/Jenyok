@@ -60,7 +60,7 @@ The Windows Host recovery patch creates a full package mirror at:
 
 `%LOCALAPPDATA%\\Jenyok\\Recovery\\Host`
 
-The mirror is a complete jpackage directory, not just the EXE: it includes the launcher, `app/saturn-pc-remote.jar`, bundled `runtime`, and package resources. The copy is refreshed from the currently running Host package during Recovery setup using Robocopy. If mirroring fails, the primary Recovery supervisor is still installed and the failure is written to the recovery log.
+The mirror is a complete jpackage directory, not just the EXE: it includes the launcher, `app/saturn-pc-remote.jar`, bundled `runtime`, and package resources. The copy is created with Robocopy only when it is missing or incomplete. An existing complete copy is preserved rather than overwritten on every startup, so a damaged primary package cannot replace the last available Recovery copy. If mirroring fails, the primary Recovery supervisor is still installed and the failure is written to the recovery log.
 
 When the Host process is missing, the supervisor tries the original executable first, waits up to 20 seconds for the process to remain running, then tries the independent Recovery copy. Both attempts are logged in:
 
