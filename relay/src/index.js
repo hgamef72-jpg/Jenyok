@@ -300,7 +300,14 @@ wss.on('connection', (ws) => {
     if (isBinary) {
       if (ws.role === 'host') {
         const host = ws.roomState.hosts.get(ws.hostId);
-        if (host && host.ws === ws) forwardToSelectedViewers(host, data, true);
+        if (host && host.ws === ws) {
+          host.frameCount = (host.frameCount || 0) + 1;
+          if (host.frameCount === 1 || host.frameCount % 300 === 0) {
+            const viewers = [...ws.roomState.viewers].filter((viewer) => resolveHostId(viewer) === host.id).length;
+            process.stdout.write(`STREAM host=${host.id} frames=${host.frameCount} bytes=${data.length} selectedViewers=${viewers}\\n`);
+          }
+          forwardToSelectedViewers(host, data, true);
+        }
       } else if (ws.role === 'viewer') sendToHost(ws, data, true);
       return;
     }
