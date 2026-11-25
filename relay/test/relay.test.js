@@ -145,5 +145,5 @@ test('routes Host, Viewer, Agent, text commands and binary frames', async (t) =>
   const unavailableRecovery = waitForMessage(viewer2, (data) => data.toString().startsWith('RECOVERY_ERROR|'));
   viewer2.send('RECOVER_HOST');
   const recoveryError = (await unavailableRecovery).data.toString();
-  assert.equal(Buffer.from(recoveryError.split('|')[1], 'base64url').toString('utf8'), 'Recovery agent is offline');
+  assert.equal(Buffer.from(recoveryError.split('|')[1], 'base64url').toString('utf8'), 'Host or Recovery agent is offline');
 });
