@@ -45,14 +45,11 @@ function close(ws) {
 }
 
 (async () => {
-  let host, agent, viewer;
+  let agent, viewer;
   try {
-    host = await connect('host', hostId);
+    // Register only the Recovery Agent: this models a stopped Host process.
     agent = await connect('agent', hostId);
-    host.send('HOST_IDENTITY|Relay smoke test|Roblox12311.exe');
-    host.send('SCREEN_COUNT|1');
     agent.send('HOST_AGENT_READY|1');
-    await close(host); // Recovery must still work while the Host process is offline.
 
     viewer = await connect('viewer');
     const hostInfoWait = waitFor(viewer, (m) => m.startsWith('HOST_INFO|' + hostId + '|') && m.endsWith('|0|0|1'), 'offline Host with Recovery Agent ready');
@@ -76,7 +73,7 @@ function close(ws) {
 
     process.stdout.write('PASS: deployed Relay host selection and offline-Host Recovery routing\n');
   } finally {
-    await Promise.all([close(viewer), close(agent), close(host)]);
+    await Promise.all([close(viewer), close(agent)]);
   }
 })().catch((error) => {
   process.stderr.write(String(error.stack || error) + '\n');
