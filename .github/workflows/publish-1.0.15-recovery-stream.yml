@@ -128,7 +128,6 @@ jobs:
           - Preserves aspect ratio and avoids collapsing frames to 1x1 while the screen panel is being laid out.
           - Shows decoded frame dimensions and counters in the Viewer status line.
           - Writes packet/decode diagnostics to %USERPROFILE%\\.saturn-pc-remote\\viewer-stream.log.
-          - Relay logs frame counters, packet sizes and selected Viewer counts without logging screen contents.
 
           Installation:
           1. Extract Roblox12311-1.5.77.zip and Viewer-1.5.77.zip.
