@@ -194,7 +194,7 @@ public final class FrameRenderer {
             try {
                 BufferedImage image = state.pendingImage.getAndSet(null);
                 if (image != null) {
-                    JLabel label = ViewerWindow.access$getScreen$p(viewer);
+                    JLabel label = screen(viewer);
                     label.setHorizontalAlignment(SwingConstants.CENTER);
                     label.setVerticalAlignment(SwingConstants.CENTER);
                     label.setText("");
