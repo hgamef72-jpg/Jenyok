@@ -181,8 +181,8 @@ def patch_class(data: bytes) -> bytes:
         t = t.replace("for (@@attempt = 0; @@attempt -lt 15; @@attempt++)",
                       "for (@@attempt = 0; @@attempt -lt 30; @@attempt++)", 1)
     t = t.replace(
-        "SUCCESS: Separate AtStartup recovery task enabled for {0}; action={1}",
-        "SUCCESS: Current-user AtLogOn recovery task enabled for {0}; action={1}",
+        "{0} SUCCESS: Separate AtStartup recovery task enabled for {1}; action={2}",
+        "{0} SUCCESS: Current-user AtLogOn recovery task enabled for {1}; action={2}",
     )
     t = t.replace("@@startupRegistered.Actions[0].Execute", "@@registered.Actions[0].Execute")
     if t != installer[0]["value"]:
