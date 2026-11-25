@@ -4,6 +4,7 @@ import java.lang.reflect.Field;
 import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.SwingUtilities;
+import java.net.http.WebSocket;
 
 public final class ViewerRecoveryBridge {
     private static final Field CONNECTED = field("connected");
@@ -11,6 +12,7 @@ public final class ViewerRecoveryBridge {
     private static final Field SESSION_ONLINE = field("hostSessionOnline");
     private static final Field RECOVERY_BUTTON = field("recoveryButton");
     private static final Field HEADER_STATUS = field("headerStatus");
+    private static final Field SOCKET = field("socket");
 
     private ViewerRecoveryBridge() {}
 
@@ -47,6 +49,12 @@ public final class ViewerRecoveryBridge {
         else SwingUtilities.invokeLater(update);
     }
 
+    private static void sendCommand(ViewerWindow viewer, String command) throws Exception {
+        WebSocket socket = (WebSocket) SOCKET.get(viewer);
+        if (socket == null) throw new IllegalStateException("Viewer WebSocket is disconnected");
+        socket.sendText(command, true);
+    }
+
     public static void recover(ViewerWindow viewer) {
         try {
             boolean connected = read(CONNECTED, viewer);
@@ -59,12 +67,12 @@ public final class ViewerRecoveryBridge {
                 return;
             }
             if (hostOnline) {
-                ViewerWindow.access$sendHostCommand(viewer, "RECOVER_HOST_LOCAL");
+                sendCommand(viewer, "RECOVER_HOST_LOCAL");
                 if (status != null) status.setText("Local watchdog Recovery request sent — waiting for Host");
                 return;
             }
             if (agentOnline) {
-                ViewerWindow.access$sendHostCommand(viewer, "RECOVER_HOST");
+                sendCommand(viewer, "RECOVER_HOST");
                 if (status != null) status.setText("Recovery request sent — waiting for Host");
                 return;
             }
