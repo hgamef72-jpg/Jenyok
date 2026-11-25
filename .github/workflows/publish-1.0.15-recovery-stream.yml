@@ -97,6 +97,8 @@ jobs:
                               raise SystemExit("Viewer listener is not wired to FrameRenderer")
                           if b"ViewerRecoveryBridge" not in jar.read(viewer_class):
                               raise SystemExit("Viewer Recovery button is not wired to local fallback")
+                          if b"ViewerRecoveryBridge" not in jar.read(listener):
+                              raise SystemExit("Viewer status handler does not update local Recovery availability")
                           if b"RECOVER_HOST_LOCAL" not in jar.read(recovery_bridge):
                               raise SystemExit("Viewer local Recovery command is missing")
                           renderer_bytes = jar.read(renderer)
