@@ -26,3 +26,18 @@ jobs:
           cache-dependency-path: relay/package.json
       - run: npm install
       - run: npm test
+      - name: Smoke test deployed Relay host selection and Recovery routing
+        env:
+          JENYOK_RELAY_URL: wss://jenyok-relay-rebuilt.onrender.com/connect
+        run: |
+          for attempt in $(seq 1 24); do
+            if curl -fsS https://jenyok-relay-rebuilt.onrender.com/healthz | grep -q '"ok":true'; then
+              break
+            fi
+            if [ "$attempt" -eq 24 ]; then
+              echo "Deployed Relay health check failed"
+              exit 1
+            fi
+            sleep 5
+          done
+          node test/deployed-smoke.js
