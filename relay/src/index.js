@@ -90,8 +90,18 @@ function sendToHost(viewer, data, binary = false) {
     safeSend(viewer, 'HOST_SESSION_STATUS|0');
     return;
   }
-  if (typeof data === 'string' && AGENT_COMMANDS.test(data) && host.agent?.readyState === WebSocket.OPEN) {
-    safeSend(host.agent, data, { binary });
+  if (data === 'RECOVER_HOST') {
+    if (host.agent?.readyState === WebSocket.OPEN) {
+      safeSend(host.agent, data, { binary });
+    } else {
+      const detail = Buffer.from('Recovery agent is offline', 'utf8').toString('base64url');
+      safeSend(viewer, 'RECOVERY_ERROR|' + detail);
+    }
+    return;
+  }
+  if (data === 'GET_AGENT_STATUS') {
+    if (host.agent?.readyState === WebSocket.OPEN) safeSend(host.agent, data, { binary });
+    else safeSend(viewer, 'HOST_AGENT_READY|0');
     return;
   }
   if (host.ws?.readyState === WebSocket.OPEN) {
@@ -187,6 +197,9 @@ function routeText(ws, text) {
       safeSend(ws, 'HOST_SESSION_STATUS|0');
       return;
     }
+    // Complete the selection handshake expected by both desktop and Android Viewers.
+    safeSend(ws, 'HOST_SELECTED|' + hostId);
+    safeSend(ws, 'HOST_AGENT_READY|' + (host.agent?.readyState === WebSocket.OPEN ? '1' : '0'));
     if (host.ws?.readyState === WebSocket.OPEN) safeSend(host.ws, 'GET_HOST_STATUS');
     else if (host.agent?.readyState === WebSocket.OPEN) safeSend(host.agent, 'GET_HOST_STATUS');
     else safeSend(ws, 'HOST_SESSION_STATUS|0');
