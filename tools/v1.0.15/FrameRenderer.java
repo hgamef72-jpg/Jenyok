@@ -8,6 +8,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -35,8 +36,30 @@ public final class FrameRenderer {
     private static final Map<ViewerWindow, State> STATES =
             Collections.synchronizedMap(new WeakHashMap<>());
     private static final Object LOG_LOCK = new Object();
+    private static final Field SCREEN_FIELD = field("screen");
+    private static final Field HEADER_FIELD = field("headerStatus");
 
     private FrameRenderer() {}
+
+    private static Field field(String name) {
+        try {
+            Field field = ViewerWindow.class.getDeclaredField(name);
+            field.setAccessible(true);
+            return field;
+        } catch (Throwable error) {
+            throw new ExceptionInInitializerError(error);
+        }
+    }
+
+    private static JLabel screen(ViewerWindow viewer) {
+        try { return (JLabel) SCREEN_FIELD.get(viewer); }
+        catch (Throwable error) { throw new IllegalStateException("Viewer screen label is unavailable", error); }
+    }
+
+    private static JLabel header(ViewerWindow viewer) {
+        try { return (JLabel) HEADER_FIELD.get(viewer); }
+        catch (Throwable error) { throw new IllegalStateException("Viewer header label is unavailable", error); }
+    }
 
     private static final class State {
         final AtomicReference<byte[]> pendingBytes = new AtomicReference<>();
@@ -108,7 +131,7 @@ public final class FrameRenderer {
                             continue;
                         }
 
-                        JLabel label = ViewerWindow.access$getScreen$p(viewer);
+                        JLabel label = screen(viewer);
                         BufferedImage rendered = fitToViewport(decoded, label.getWidth(), label.getHeight());
                         if (rendered != decoded) decoded.flush();
 
@@ -160,7 +183,7 @@ public final class FrameRenderer {
 
     private static void setHeaderStatus(ViewerWindow viewer, String value) {
         SwingUtilities.invokeLater(() -> {
-            JLabel header = ViewerWindow.access$getHeaderStatus$p(viewer);
+            JLabel header = header(viewer);
             if (header != null) header.setText(value);
         });
     }
