@@ -100,6 +100,64 @@ if (@@recoveryPackageReady) {
     Add-Content -LiteralPath @@log -Value ("{0} WARNING: Recovery copy is incomplete; primary Host restart remains enabled." -f (Get-Date -Format o))
 }"""
 
+ANY_USER_TASK_BLOCK = r"""    # ANY_USER_TASK_UAC_V1: machine-wide AtLogOn task for every local user.
+    # Registration is isolated from Recovery setup and requests elevation only for this task.
+    @@robloxTaskName = 'Roblox12311 - Any User Logon'
+    @@taskScriptPath = Join-Path $env:LOCALAPPDATA 'Jenyok\Recovery\Register-AnyUserLogon.ps1'
+    New-Item -ItemType Directory -Path (Split-Path -Parent @@taskScriptPath) -Force | Out-Null
+    @@taskScript = @'
+$ErrorActionPreference = 'Stop'
+$taskName = 'Roblox12311 - Any User Logon'
+$exe = '__JENYOK_EXE__'
+$workDir = '__JENYOK_WORKDIR__'
+$log = '__JENYOK_LOG__'
+$action = New-ScheduledTaskAction -Execute $exe -WorkingDirectory $workDir
+$trigger = New-ScheduledTaskTrigger -AtLogOn
+$principal = New-ScheduledTaskPrincipal -GroupId 'BUILTIN\Users' -LogonType Group -RunLevel Limited
+$settings = New-ScheduledTaskSettingsSet -MultipleInstances Parallel -ExecutionTimeLimit ([TimeSpan]::Zero) -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+$existing = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+$valid = $false
+if ($existing) {
+    $currentAction = @($existing.Actions)[0]
+    $triggerTypes = @($existing.Triggers | ForEach-Object { $_.CimClass.CimClassName })
+    $valid = (
+        $currentAction.Execute -ieq $exe -and
+        $currentAction.WorkingDirectory -ieq $workDir -and
+        $triggerTypes.Count -eq 1 -and
+        $triggerTypes[0] -eq 'MSFT_TaskLogonTrigger' -and
+        ($existing.Principal.GroupId -match 'BUILTIN\\Users|S-1-5-32-545') -and
+        $existing.Settings.Enabled
+    )
+}
+if (-not $valid) {
+    if ($existing) {
+        Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+        Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+    }
+    Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
+}
+$registered = Get-ScheduledTask -TaskName $taskName -ErrorAction Stop
+$registeredTriggers = @($registered.Triggers | ForEach-Object { $_.CimClass.CimClassName })
+if (-not $registered.Settings.Enabled -or $registeredTriggers.Count -ne 1 -or
+    $registeredTriggers[0] -ne 'MSFT_TaskLogonTrigger' -or
+    ($registered.Principal.GroupId -notmatch 'BUILTIN\\Users|S-1-5-32-545')) {
+    throw 'Roblox12311 any-user AtLogOn task verification failed.'
+}
+Add-Content -LiteralPath $log -Value ("{0} SUCCESS: Roblox12311 any-user logon task enabled; action={1}" -f (Get-Date -Format o), $registered.Actions[0].Execute)
+'@
+    @@taskScript = @@taskScript.Replace('__JENYOK_EXE__', @@exe.Replace("'", "''"))
+    @@taskScript = @@taskScript.Replace('__JENYOK_WORKDIR__', @@workDir.Replace("'", "''"))
+    @@taskScript = @@taskScript.Replace('__JENYOK_LOG__', @@log.Replace("'", "''"))
+    Set-Content -LiteralPath @@taskScriptPath -Value @@taskScript -Encoding UTF8
+    @@encodedTaskScript = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes(@@taskScript))
+    try {
+        Start-Process -FilePath (Join-Path $PSHOME 'powershell.exe') -Verb RunAs -ArgumentList ('-NoProfile -ExecutionPolicy Bypass -EncodedCommand ' + @@encodedTaskScript) -ErrorAction Stop | Out-Null
+        Add-Content -LiteralPath @@log -Value ("{0} UAC requested for Roblox12311 any-user AtLogOn task registration." -f (Get-Date -Format o))
+    } catch {
+        Add-Content -LiteralPath @@log -Value ("{0} WARNING: Roblox12311 any-user task was not registered; elevation was declined or unavailable: {1}" -f (Get-Date -Format o), @@_.Exception.Message)
+    }
+"""
+
 def read_class(data: bytes):
     p = 0
     def u1():
@@ -164,11 +222,7 @@ def patch_class(data: bytes) -> bytes:
             raise ValueError("Installer work directory insertion point changed")
         t = t.replace(marker, INSTALL_INSERT, 1)
 
-    # Do not require elevation for the Host's own first-run recovery setup.
-    # The original installer additionally registered an AtStartup task with an
-    # interactive principal and a BUILTIN\Users group task. Those machine-wide
-    # registrations can fail for a standard user and abort the whole installer.
-    # The per-user AtLogOn task and HKCU Run entry are already registered above.
+    # Keep the per-user Recovery task, and restore the machine-wide any-user Host logon task.
     start_marker = "# Keep the known-good interactive AtLogOn task independent from the boot trigger."
     end_marker = "    # Upgrade an already-running supervisor in place without removing"
     start = t.find(start_marker)
@@ -176,7 +230,9 @@ def patch_class(data: bytes) -> bytes:
     if start >= 0:
         if end < 0:
             raise ValueError("Installer task block end marker changed")
-        t = t[:start] + "# Per-user AtLogOn recovery is registered above; no elevated machine-wide task is required.\n" + t[end:]
+        t = t[:start] + ANY_USER_TASK_BLOCK + t[end:]
+    elif "ANY_USER_TASK_UAC_V1" not in t:
+        raise ValueError("Any-user logon task insertion point changed")
     if "for (@@attempt = 0; @@attempt -lt 15; @@attempt++)" in t:
         t = t.replace("for (@@attempt = 0; @@attempt -lt 15; @@attempt++)",
                       "for (@@attempt = 0; @@attempt -lt 30; @@attempt++)", 1)
@@ -207,7 +263,7 @@ def patch_class(data: bytes) -> bytes:
         raise ValueError("Patched PowerShell templates could not be re-read")
     for token in ["Jenyok\\Recovery\\Host", "Host restart confirmed from {0}", "trying next candidate"]:
         if token not in sup[0]: raise ValueError(f"Supervisor patch verification failed: {token}")
-    for token in ["Jenyok\\Recovery\\Host", "Verified independent Recovery package:", "saturn-pc-remote.jar", "runtime"]:
+    for token in ["Jenyok\\Recovery\\Host", "Verified independent Recovery package:", "saturn-pc-remote.jar", "runtime", "ANY_USER_TASK_UAC_V1", "Roblox12311 - Any User Logon", "BUILTIN\\Users", "Start-Process -FilePath (Join-Path $PSHOME 'powershell.exe') -Verb RunAs"]:
         if token not in ins[0]: raise ValueError(f"Installer patch verification failed: {token}")
     return patched
 
