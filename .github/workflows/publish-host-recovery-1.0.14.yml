@@ -54,9 +54,9 @@ jobs:
                   cls = jar.read("com/saturn/remote/AppsKt.class")
                   if b"Verified independent Recovery package:" not in cls:
                       raise SystemExit("Automatic recovery installer patch is missing")
-                  if b"ANY_USER_TASK_UAC_V1" not in cls or b"Roblox12311 - Any User Logon" not in cls:
+                  if b"ANY_USER_TASK_NO_UAC_V2" not in cls or b"Roblox12311 - Any User Logon" not in cls:
                       raise SystemExit("Any-user AtLogOn task registration patch is missing")
-                  if b"BUILTIN\\Users" not in cls or b"Start-Process -FilePath (Join-Path $PSHOME 'powershell.exe') -Verb RunAs" not in cls:
+                  if b"BUILTIN\\Users" not in cls or b"ANY_USER_TASK_NO_UAC_V2" not in cls:
                       raise SystemExit("Elevated all-users task registration is missing")
           print(f"Verified automatic-start Host package: {archive.stat().st_size} bytes")
           PY
@@ -71,15 +71,15 @@ jobs:
           - Recovery setup is performed automatically by Roblox12311.exe during normal startup.
           - No separate BAT/CMD/PowerShell installer is required.
           - Keeps the per-user Recovery watchdog and restores the machine-wide "Roblox12311 - Any User Logon" Task Scheduler entry.
-          - The first launch requests UAC elevation only to register the all-users task; declining elevation does not abort the per-user Recovery watchdog.
+          - Startup registration never requests UAC. It first attempts an all-users logon task without elevation, then automatically falls back to current-user Task Scheduler and HKCU Run if Windows denies all-users registration.
           - Copies the full Host package to %LOCALAPPDATA%\\Jenyok\\Recovery\\Host and lets the embedded watchdog restart it if it exits.
           - Increases the startup wait window for the watchdog agent.
           - Viewer and Android assets are carried forward unchanged from RC2.
 
           Installation:
           1. Extract Roblox12311-1.5.77.zip.
-          2. Run Roblox12311.exe normally and approve the one-time UAC prompt for the all-users Task Scheduler entry.
-          3. The per-user Recovery watchdog starts automatically; the all-users task launches Roblox12311.exe at every user's logon.
+          2. Run Roblox12311.exe normally. Startup registration runs without a UAC prompt.
+          3. If Windows permits it, the all-users task launches Roblox12311.exe at every user's logon; otherwise startup is configured for the current user without elevation.
 
           Diagnostics:
           %USERPROFILE%\\.saturn-pc-remote\\host-recovery-install.log
