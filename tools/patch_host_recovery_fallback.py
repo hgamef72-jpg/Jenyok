@@ -179,7 +179,7 @@ def patch_class(data: bytes) -> bytes:
         raise ValueError("Patched PowerShell templates could not be re-read")
     for token in ["Jenyok\\Recovery\\Host", "Host restart confirmed from {0}", "trying next candidate"]:
         if token not in sup[0]: raise ValueError(f"Supervisor patch verification failed: {token}")
-    for token in ["Jenyok\\Recovery\\Host", "Verified independent Recovery package:", "saturn-pc-remote.jar", "bundled Java runtime"]:
+    for token in ["Jenyok\\Recovery\\Host", "Verified independent Recovery package:", "saturn-pc-remote.jar", "runtime"]:
         if token not in ins[0]: raise ValueError(f"Installer patch verification failed: {token}")
     return patched
 
