@@ -1,0 +1,188 @@
+name: Publish Jenyok 1.0.16 — Independent Recovery and Viewer Stream Fix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/publish-1.0.16-recovery-stream.yml"
+      - "tools/patch_host_recovery_fallback.py"
+      - "tools/v1.0.16/**"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download verified Windows baseline packages
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p input output tools/classes
+          gh release download v1.0.12-rc2 --repo "$GITHUB_REPOSITORY" --pattern "Roblox12311-1.5.77.zip" --dir input
+          gh release download v1.0.12-rc2 --repo "$GITHUB_REPOSITORY" --pattern "Viewer-1.5.77.zip" --dir input
+          gh release download v1.0.12-rc2 --repo "$GITHUB_REPOSITORY" --pattern "Viewer-1.0.12.apk" --dir output
+          unzip -p input/Roblox12311-1.5.77.zip app/saturn-pc-remote.jar > input/host-app.jar
+          unzip -p input/Viewer-1.5.77.zip app/saturn-pc-remote.jar > input/viewer-app.jar
+          test -s input/host-app.jar
+          test -s input/viewer-app.jar
+
+      - name: Compile bytecode patchers and test the real frame format
+        run: |
+          curl -fsSL https://repo.maven.apache.org/maven2/org/ow2/asm/asm/9.7.1/asm-9.7.1.jar -o input/asm.jar
+          curl -fsSL https://repo.maven.apache.org/maven2/org/ow2/asm/asm-tree/9.7.1/asm-tree-9.7.1.jar -o input/asm-tree.jar
+          javac --release 17 -cp "input/host-app.jar" -d tools/classes tools/v1.0.16/HostRecoveryBridge.java
+          javac --release 17 -cp "input/viewer-app.jar" -d tools/classes tools/v1.0.16/ViewerRecoveryBridge.java
+          javac --release 17 -cp "input/viewer-app.jar" -d tools/classes tools/v1.0.16/FrameRenderer.java
+          javac --release 17 -cp "input/asm.jar:input/asm-tree.jar:input/host-app.jar" -d tools/classes tools/v1.0.16/HostRecoveryPatcher.java
+          javac --release 17 -cp "input/asm.jar:input/asm-tree.jar:input/viewer-app.jar" -d tools/classes tools/v1.0.16/ViewerRecoveryPatcher.java
+          javac --release 17 -cp "tools/classes:input/viewer-app.jar" -d tools/classes tools/v1.0.16/FrameRendererTest.java
+          java -Djava.awt.headless=true -cp "tools/classes:input/viewer-app.jar" com.saturn.remote.FrameRendererTest
+
+      - name: Install independent Recovery mirror and patch Host watchdog routing
+        run: |
+          python tools/patch_host_recovery_fallback.py input/Roblox12311-1.5.77.zip output/host-with-watchdog.zip
+          java -cp "tools/classes:input/asm.jar:input/asm-tree.jar:input/host-app.jar" HostRecoveryPatcher \
+            output/host-with-watchdog.zip output/Roblox12311-1.5.77.zip \
+            tools/classes/com/saturn/remote/HostRecoveryBridge.class
+          rm output/host-with-watchdog.zip
+
+      - name: Patch Viewer WebSocket callbacks and JPEG renderer
+        run: |
+          java -cp "tools/classes:input/asm.jar:input/asm-tree.jar:input/viewer-app.jar" ViewerRecoveryPatcher \
+            input/Viewer-1.5.77.zip output/viewer-recovery.zip \
+            tools/classes/com/saturn/remote/ViewerRecoveryBridge.class
+          python tools/v1.0.16/patch_viewer_renderer.py \
+            output/viewer-recovery.zip output/Viewer-1.5.77.zip \
+            tools/classes/com/saturn/remote/FrameRenderer.class
+          rm output/viewer-recovery.zip
+
+      - name: Verify Recovery copy-back, independent watchdog and frame callback wiring
+        run: |
+          python - <<'PY'
+          import io
+          import pathlib
+          import zipfile
+
+          host_path = pathlib.Path("output/Roblox12311-1.5.77.zip")
+          viewer_path = pathlib.Path("output/Viewer-1.5.77.zip")
+
+          for path in (host_path, viewer_path):
+              with zipfile.ZipFile(path) as outer:
+                  bad = outer.testzip()
+                  if bad:
+                      raise SystemExit(f"{path}: ZIP integrity failure: {bad}")
+                  app = outer.read("app/saturn-pc-remote.jar")
+                  with zipfile.ZipFile(io.BytesIO(app)) as jar:
+                      bad = jar.testzip()
+                      if bad:
+                          raise SystemExit(f"{path}: nested JAR integrity failure: {bad}")
+                      names = set(jar.namelist())
+                      if path.name.startswith("Roblox"):
+                          required = {
+                              "com/saturn/remote/AppsKt.class",
+                              "com/saturn/remote/HostState$connect$1.class",
+                              "com/saturn/remote/HostRecoveryBridge.class",
+                          }
+                          missing = required - names
+                          if missing:
+                              raise SystemExit(f"Host classes missing: {sorted(missing)}")
+                          apps = jar.read("com/saturn/remote/AppsKt.class")
+                          for marker in (
+                              b"Verified independent Recovery package:",
+                              b"ANY_USER_TASK_NO_UAC_V2",
+                              b"Primary Host package is missing or incomplete",
+                              b"Independent Recovery copy restored the primary Host package",
+                              b"Starting Host candidate:",
+                          ):
+                              if marker not in apps:
+                                  raise SystemExit(f"Independent Recovery patch marker missing: {marker!r}")
+                          bridge = jar.read("com/saturn/remote/HostRecoveryBridge.class")
+                          if b"LOCALAPPDATA" not in bridge and b"AppData" not in bridge:
+                              raise SystemExit("Host Recovery bridge does not verify the independent package location")
+                          if b"host-recovery-supervisor.vbs" not in bridge:
+                              raise SystemExit("Host Recovery bridge has no direct watchdog launch fallback")
+                          listener = jar.read("com/saturn/remote/HostState$connect$1.class")
+                          if b"HostRecoveryBridge" not in listener:
+                              raise SystemExit("Host WebSocket listener is not wired to Recovery")
+                      else:
+                          required = {
+                              "com/saturn/remote/ViewerWindow.class",
+                              "com/saturn/remote/ViewerWindow$connect$1.class",
+                              "com/saturn/remote/ViewerRecoveryBridge.class",
+                              "com/saturn/remote/FrameRenderer.class",
+                          }
+                          missing = required - names
+                          if missing:
+                              raise SystemExit(f"Viewer classes missing: {sorted(missing)}")
+                          viewer_class = jar.read("com/saturn/remote/ViewerWindow.class")
+                          listener = jar.read("com/saturn/remote/ViewerWindow$connect$1.class")
+                          renderer = jar.read("com/saturn/remote/FrameRenderer.class")
+                          recovery = jar.read("com/saturn/remote/ViewerRecoveryBridge.class")
+                          if b"ViewerRecoveryBridge" not in viewer_class:
+                              raise SystemExit("Viewer Recovery button is not wired")
+                          for marker in (b"FrameRenderer", b"onBinary", b"onConnected"):
+                              if marker not in listener:
+                                  raise SystemExit(f"Viewer WebSocket callback is missing {marker!r}")
+                          for marker in (b"viewer-websocket-open", b"viewer-stream.log", b"monitor="):
+                              if marker not in renderer:
+                                  raise SystemExit(f"Viewer stream diagnostics missing {marker!r}")
+                          if b"RECOVER_HOST_LOCAL" not in recovery:
+                              raise SystemExit("Viewer local Recovery command is missing")
+              print(f"Verified {path}: {path.stat().st_size} bytes")
+
+          with zipfile.ZipFile("output/Viewer-1.0.12.apk") as apk:
+              bad = apk.testzip()
+              if bad:
+                  raise SystemExit(f"Android APK ZIP integrity failure: {bad}")
+          print("Verified Android APK ZIP integrity (APK is carried forward unchanged).")
+          PY
+
+      - name: Publish release v1.0.16
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NOTES=$(cat <<'EOF'
+          Jenyok 1.0.16 — Independent Recovery Copy-Back and Explicit Viewer Frame Pipeline
+
+          Recovery:
+          - Restores the independent full Host package mirror at %LOCALAPPDATA%\\Jenyok\\Recovery\\Host.
+          - The watchdog runs in a separate PowerShell process and is registered through Windows Task Scheduler; it is not a child of Roblox12311.exe.
+          - If the primary Host folder or required package files are missing, the watchdog copies the complete package back from the independent mirror before launching it.
+          - If copy-back fails, it attempts to launch the independent Recovery copy directly.
+          - Recovery remains per-user when Windows refuses machine-wide task registration without elevation. No UAC bypass is used.
+          - The Host Recovery button verifies the independent copy and can start the watchdog task or its VBS launcher fallback.
+          - A remote Recovery request while Host is offline still requires the separately running network Recovery Agent. Local watchdog restart does not require the Viewer or Relay.
+          - If both the original Host package and the independent Recovery copy are deleted, the executable cannot be reconstructed without another installation source.
+
+          PC Viewer:
+          - Replaces the Viewer WebSocket onBinary handler with an explicit FrameRenderer call and requests the next WebSocket message.
+          - Adds a WebSocket-open diagnostic before the first frame arrives.
+          - Logs packet size, monitor index, JPEG decode results and frame dimensions to %USERPROFILE%\\.saturn-pc-remote\\viewer-stream.log.
+          - Handles the Host's 4-byte monitor-index prefix before decoding the JPEG payload.
+          - Displays a clear status when the Viewer is connected but no Host frames are arriving.
+
+          Installation:
+          1. Extract Roblox12311-1.5.77.zip and Viewer-1.5.77.zip.
+          2. Replace the existing Host and PC Viewer folders with these packages.
+          3. Run Roblox12311.exe once after replacement so it installs/repairs the watchdog task and independent Recovery copy.
+          4. Android Viewer 1.0.12 is carried forward unchanged.
+
+          Validation:
+          - CI compiles all helper and ASM patcher classes.
+          - CI decodes a synthetic JPEG packet with the Host's 4-byte monitor-index prefix.
+          - CI verifies the embedded watchdog mirror, copy-back/fallback code, Host Recovery bridge, Viewer WebSocket callback wiring, nested JAR integrity and final ZIP integrity.
+          - Physical Windows runtime tests for Host termination, primary-folder deletion, scheduled-task persistence and end-to-end screen streaming are still required.
+          EOF
+          )
+          if gh release view v1.0.16 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload v1.0.16 output/* --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit v1.0.16 --repo "$GITHUB_REPOSITORY" --title "Jenyok 1.0.16 — Independent Recovery and Viewer Stream Fix" --notes "$NOTES" --draft=false --prerelease=false
+          else
+            gh release create v1.0.16 output/* --repo "$GITHUB_REPOSITORY" --title "Jenyok 1.0.16 — Independent Recovery and Viewer Stream Fix" --notes "$NOTES"
+          fi
