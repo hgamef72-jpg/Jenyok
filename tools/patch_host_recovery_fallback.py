@@ -43,9 +43,42 @@ OLD_LAUNCH_BLOCK = """                    try {
                     }"""
 
 NEW_LAUNCH_BLOCK = """                    @@started = @@false
-                    @@candidates = @(@@exe, @@recoveryExe) | Select-Object -Unique
-                    foreach (@@candidateExe in @@candidates) {
-                        if (-not (Test-Path -LiteralPath @@candidateExe)) { continue }
+                    @@primaryRoot = Split-Path -Parent @@exe
+                    @@primaryReady = (
+                        (Test-Path -LiteralPath @@exe) -and
+                        (Test-Path -LiteralPath (Join-Path @@primaryRoot 'app\\saturn-pc-remote.jar')) -and
+                        (Test-Path -LiteralPath (Join-Path @@primaryRoot 'runtime'))
+                    )
+                    @@recoveryReady = (
+                        (Test-Path -LiteralPath @@recoveryExe) -and
+                        (Test-Path -LiteralPath (Join-Path @@recoveryRoot 'app\\saturn-pc-remote.jar')) -and
+                        (Test-Path -LiteralPath (Join-Path @@recoveryRoot 'runtime'))
+                    )
+                    if (-not @@primaryReady -and @@recoveryReady) {
+                        try {
+                            New-Item -ItemType Directory -Path @@primaryRoot -Force | Out-Null
+                            Write-RecoveryLog ("Primary Host package is missing or incomplete; restoring from independent copy: {0}" -f @@recoveryRoot)
+                            & robocopy.exe @@recoveryRoot @@primaryRoot /E /COPY:DAT /DCOPY:DAT /R:1 /W:1 /XJ /IS /IT /NFL /NDL /NJH /NJS
+                            @@restoreExitCode = @@LASTEXITCODE
+                            @@primaryReady = (
+                                @@restoreExitCode -lt 8 -and
+                                (Test-Path -LiteralPath @@exe) -and
+                                (Test-Path -LiteralPath (Join-Path @@primaryRoot 'app\\saturn-pc-remote.jar')) -and
+                                (Test-Path -LiteralPath (Join-Path @@primaryRoot 'runtime'))
+                            )
+                            if (@@primaryReady) {
+                                Write-RecoveryLog ("Independent Recovery copy restored the primary Host package; Robocopy exit={0}" -f @@restoreExitCode)
+                            } else {
+                                Write-RecoveryLog ("ERROR: Primary Host restoration failed; Robocopy exit={0}. Will launch the independent copy directly." -f @@restoreExitCode)
+                            }
+                        } catch {
+                            Write-RecoveryLog ("ERROR restoring primary Host package: {0}" -f @@_.Exception.ToString())
+                        }
+                    }
+                    @@candidates = @()
+                    if (@@primaryReady) { @@candidates += @@exe }
+                    if (@@recoveryReady) { @@candidates += @@recoveryExe }
+                    foreach (@@candidateExe in (@@candidates | Select-Object -Unique)) {
                         try {
                             Write-RecoveryLog ("Starting Host candidate: {0}" -f @@candidateExe)
                             Start-Process -FilePath @@candidateExe -WorkingDirectory (Split-Path -Parent @@candidateExe) -ErrorAction Stop | Out-Null
@@ -67,7 +100,7 @@ NEW_LAUNCH_BLOCK = """                    @@started = @@false
                         }
                     }
                     if (-not @@started) {
-                        Write-RecoveryLog "ERROR: Primary Host and Recovery copy both failed to start; retry delayed."
+                        Write-RecoveryLog "ERROR: Primary Host and independent Recovery copy both failed to start; retry delayed."
                         Start-Sleep -Seconds 25
                     }"""
 
