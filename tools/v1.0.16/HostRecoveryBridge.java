@@ -33,7 +33,8 @@ public final class HostRecoveryBridge {
     private static boolean completePackage(Path root) {
         return Files.isRegularFile(root.resolve("Roblox12311.exe"))
                 && Files.isRegularFile(root.resolve("app").resolve("saturn-pc-remote.jar"))
-                && Files.isDirectory(root.resolve("runtime"));
+                && Files.isDirectory(root.resolve("runtime"))
+                && Files.isRegularFile(root.resolve("recovery-package-version.txt"));
     }
 
     private static boolean installed() {
