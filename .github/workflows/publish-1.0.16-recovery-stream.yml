@@ -42,6 +42,7 @@ jobs:
           javac --release 17 -cp "input/asm.jar:input/asm-tree.jar:input/host-app.jar" -d tools/classes tools/v1.0.16/HostRecoveryPatcher.java
           javac --release 17 -cp "input/asm.jar:input/asm-tree.jar:input/viewer-app.jar" -d tools/classes tools/v1.0.16/ViewerRecoveryPatcher.java
           javac --release 17 -cp "tools/classes:input/viewer-app.jar" -d tools/classes tools/v1.0.16/FrameRendererTest.java
+          javac --release 17 -d tools/classes tools/v1.0.16/ClassLoadTest.java
           java -Djava.awt.headless=true -cp "tools/classes:input/viewer-app.jar" com.saturn.remote.FrameRendererTest
 
       - name: Install independent Recovery mirror and patch Host watchdog routing
@@ -141,6 +142,17 @@ jobs:
               if bad:
                   raise SystemExit(f"Android APK ZIP integrity failure: {bad}")
           print("Verified Android APK ZIP integrity (APK is carried forward unchanged).")
+          PY
+          unzip -p output/Roblox12311-1.5.77.zip app/saturn-pc-remote.jar > output/host-app.jar
+          unzip -p output/Viewer-1.5.77.zip app/saturn-pc-remote.jar > output/viewer-app.jar
+          java -Xverify:all -cp "tools/classes:output/host-app.jar" ClassLoadTest \
+            'com.saturn.remote.HostState$connect$1' \
+            'com.saturn.remote.HostRecoveryBridge' \
+            'com.saturn.remote.AppsKt'
+          java -Xverify:all -cp "tools/classes:output/viewer-app.jar" ClassLoadTest \
+            'com.saturn.remote.ViewerWindow$connect$1' \
+            'com.saturn.remote.ViewerRecoveryBridge' \
+            'com.saturn.remote.FrameRenderer'
           PY
 
       - name: Publish release v1.0.16
