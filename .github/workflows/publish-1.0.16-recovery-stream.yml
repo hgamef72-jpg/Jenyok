@@ -48,6 +48,25 @@ jobs:
       - name: Install independent Recovery mirror and patch Host watchdog routing
         run: |
           python tools/patch_host_recovery_fallback.py input/Roblox12311-1.5.77.zip output/host-with-watchdog.zip
+          python - <<'PY'
+          import pathlib
+          import zipfile
+
+          archive = pathlib.Path("output/host-with-watchdog.zip")
+          temporary = archive.with_suffix(".tmp")
+          with zipfile.ZipFile(archive, "r") as source, zipfile.ZipFile(
+              temporary, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6
+          ) as target:
+              for entry in source.infolist():
+                  if entry.filename == "recovery-package-version.txt":
+                      continue
+                  target.writestr(entry, source.read(entry.filename))
+              target.writestr("recovery-package-version.txt", "1.0.16\\n")
+          temporary.replace(archive)
+          with zipfile.ZipFile(archive) as check:
+              if check.read("recovery-package-version.txt").decode().strip() != "1.0.16":
+                  raise SystemExit("Recovery package version marker was not embedded")
+          PY
           java -cp "tools/classes:input/asm.jar:input/asm-tree.jar:input/host-app.jar" HostRecoveryPatcher \
             output/host-with-watchdog.zip output/Roblox12311-1.5.77.zip \
             tools/classes/com/saturn/remote/HostRecoveryBridge.class
@@ -93,6 +112,8 @@ jobs:
                           missing = required - names
                           if missing:
                               raise SystemExit(f"Host classes missing: {sorted(missing)}")
+                          if outer.read("recovery-package-version.txt").decode().strip() != "1.0.16":
+                              raise SystemExit("Host Recovery package version marker is missing or incorrect")
                           apps = jar.read("com/saturn/remote/AppsKt.class")
                           for marker in (
                               b"Verified independent Recovery package:",
@@ -165,6 +186,7 @@ jobs:
           Recovery:
           - Restores the independent full Host package mirror at %LOCALAPPDATA%\\Jenyok\\Recovery\\Host.
           - The watchdog runs in a separate PowerShell process and is registered through Windows Task Scheduler; it is not a child of Roblox12311.exe.
+          - The independent mirror is versioned and refreshed when a newer Host package is installed; a same-version mirror is preserved rather than overwritten by a damaged primary package.
           - If the primary Host folder or required package files are missing, the watchdog copies the complete package back from the independent mirror before launching it.
           - If copy-back fails, it attempts to launch the independent Recovery copy directly.
           - Recovery remains per-user when Windows refuses machine-wide task registration without elevation. No UAC bypass is used.
