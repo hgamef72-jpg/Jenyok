@@ -133,7 +133,7 @@ NEW_LAUNCH_BLOCK = """                    @@started = @@false
                         Start-Sleep -Seconds 25
                     }"""
 
-INSTALL_INSERT = """@@workDir = EXPR_WORKDIR
+PREVIOUS_INSTALL_INSERT = """@@workDir = EXPR_WORKDIR
 @@recoveryRoot = Join-Path $env:LOCALAPPDATA 'Jenyok\\Recovery\\Host'
 @@sourceRoot = [System.IO.Path]::GetFullPath(@@workDir)
 @@targetRoot = [System.IO.Path]::GetFullPath(@@recoveryRoot)
@@ -160,6 +160,46 @@ if (@@recoveryPackageReady) {
     Add-Content -LiteralPath @@log -Value ("{0} Verified independent Recovery package: {1}" -f (Get-Date -Format o), @@recoveryRoot)
 } else {
     Add-Content -LiteralPath @@log -Value ("{0} WARNING: Recovery copy is incomplete; primary Host restart remains enabled." -f (Get-Date -Format o))
+}"""
+
+INSTALL_INSERT = """@@workDir = EXPR_WORKDIR
+@@recoveryRoot = Join-Path $env:LOCALAPPDATA 'Jenyok\\Recovery\\Host'
+@@sourceRoot = [System.IO.Path]::GetFullPath(@@workDir)
+@@targetRoot = [System.IO.Path]::GetFullPath(@@recoveryRoot)
+@@recoveryExe = Join-Path @@targetRoot ([System.IO.Path]::GetFileName(@@exe))
+@@sourceVersionFile = Join-Path @@sourceRoot 'recovery-package-version.txt'
+@@targetVersionFile = Join-Path @@targetRoot 'recovery-package-version.txt'
+@@sourceVersion = ''
+@@targetVersion = ''
+if (Test-Path -LiteralPath @@sourceVersionFile) { @@sourceVersion = (Get-Content -LiteralPath @@sourceVersionFile -Raw).Trim() }
+if (Test-Path -LiteralPath @@targetVersionFile) { @@targetVersion = (Get-Content -LiteralPath @@targetVersionFile -Raw).Trim() }
+@@recoveryPackageReady = (
+    (Test-Path -LiteralPath @@recoveryExe) -and
+    (Test-Path -LiteralPath (Join-Path @@targetRoot 'app\\saturn-pc-remote.jar')) -and
+    (Test-Path -LiteralPath (Join-Path @@targetRoot 'runtime'))
+)
+@@recoveryPackageCurrent = (@@recoveryPackageReady -and @@sourceVersion -ne '' -and @@sourceVersion -eq @@targetVersion)
+if (-not @@recoveryPackageCurrent -and -not @@sourceRoot.Equals(@@targetRoot, [StringComparison]::OrdinalIgnoreCase)) {
+    New-Item -ItemType Directory -Path @@targetRoot -Force | Out-Null
+    Add-Content -LiteralPath @@log -Value ("{0} Updating independent Recovery package mirror from version '{1}' to '{2}'." -f (Get-Date -Format o), @@targetVersion, @@sourceVersion)
+    & robocopy.exe @@sourceRoot @@targetRoot /MIR /COPY:DAT /DCOPY:DAT /R:1 /W:1 /XJ /NFL /NDL /NJH /NJS
+    @@copyExitCode = @@LASTEXITCODE
+    if (@@copyExitCode -ge 8) {
+        Add-Content -LiteralPath @@log -Value ("{0} WARNING: Recovery package mirror update failed; Robocopy exit code {1}." -f (Get-Date -Format o), @@copyExitCode)
+    }
+}
+@@recoveryPackageReady = (
+    (Test-Path -LiteralPath @@recoveryExe) -and
+    (Test-Path -LiteralPath (Join-Path @@targetRoot 'app\\saturn-pc-remote.jar')) -and
+    (Test-Path -LiteralPath (Join-Path @@targetRoot 'runtime'))
+)
+@@targetVersion = ''
+if (Test-Path -LiteralPath @@targetVersionFile) { @@targetVersion = (Get-Content -LiteralPath @@targetVersionFile -Raw).Trim() }
+@@recoveryPackageCurrent = (@@recoveryPackageReady -and @@sourceVersion -ne '' -and @@sourceVersion -eq @@targetVersion)
+if (@@recoveryPackageCurrent) {
+    Add-Content -LiteralPath @@log -Value ("{0} Verified independent Recovery package: {1}; version={2}" -f (Get-Date -Format o), @@recoveryRoot, @@targetVersion)
+} else {
+    Add-Content -LiteralPath @@log -Value ("{0} WARNING: Independent Recovery package is missing, incomplete or stale; primary Host restart remains enabled." -f (Get-Date -Format o))
 }"""
 
 ANY_USER_TASK_BLOCK = r"""    # ANY_USER_TASK_NO_UAC_V2: try all-users task without elevation; always fall back per-user.
@@ -279,11 +319,16 @@ def patch_class(data: bytes) -> bytes:
         replacements.append((supervisor[0], s))
 
     t = installer[0]["value"]
-    if "Verified independent Recovery package:" not in t:
-        marker = "@@workDir = EXPR_WORKDIR"
-        if t.count(marker) != 1:
-            raise ValueError("Installer work directory insertion point changed")
-        t = t.replace(marker, INSTALL_INSERT, 1)
+    if "recovery-package-version.txt" not in t:
+        if "Verified independent Recovery package:" not in t:
+            marker = "@@workDir = EXPR_WORKDIR"
+            if t.count(marker) != 1:
+                raise ValueError("Installer work directory insertion point changed")
+            t = t.replace(marker, INSTALL_INSERT, 1)
+        elif t.count(PREVIOUS_INSTALL_INSERT) == 1:
+            t = t.replace(PREVIOUS_INSTALL_INSERT, INSTALL_INSERT, 1)
+        else:
+            raise ValueError("Existing Recovery mirror installer cannot be upgraded to version-aware copy")
 
     # Keep the per-user Recovery task, and restore the machine-wide any-user Host logon task.
     start_marker = "# Keep the known-good interactive AtLogOn task independent from the boot trigger."
@@ -333,7 +378,7 @@ def patch_class(data: bytes) -> bytes:
                   "Primary Host package is missing or incomplete",
                   "Independent Recovery copy restored the primary Host package"]:
         if token not in sup[0]: raise ValueError(f"Supervisor patch verification failed: {token}")
-    for token in ["Jenyok\\Recovery\\Host", "Verified independent Recovery package:", "saturn-pc-remote.jar", "runtime", "ANY_USER_TASK_NO_UAC_V2", "Roblox12311 - Any User Logon", "BUILTIN\\Users", "& (Join-Path $PSHOME 'powershell.exe') -NoProfile -ExecutionPolicy Bypass -EncodedCommand"]:
+    for token in ["Jenyok\\Recovery\\Host", "Verified independent Recovery package:", "saturn-pc-remote.jar", "runtime", "recovery-package-version.txt", "Recovery package mirror update failed", "ANY_USER_TASK_NO_UAC_V2", "Roblox12311 - Any User Logon", "BUILTIN\\Users", "& (Join-Path $PSHOME 'powershell.exe') -NoProfile -ExecutionPolicy Bypass -EncodedCommand"]:
         if token not in ins[0]: raise ValueError(f"Installer patch verification failed: {token}")
     return patched
 
