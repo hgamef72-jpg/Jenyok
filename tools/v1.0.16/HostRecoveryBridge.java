@@ -71,12 +71,15 @@ public final class HostRecoveryBridge {
                 .redirectOutput(ProcessBuilder.Redirect.DISCARD)
                 .redirectError(ProcessBuilder.Redirect.DISCARD)
                 .start();
-        if (process.waitFor(8, TimeUnit.SECONDS) && process.exitValue() == 0) return true;
-        process.destroyForcibly();
+        boolean taskStarted = process.waitFor(8, TimeUnit.SECONDS) && process.exitValue() == 0;
+        if (!taskStarted) process.destroyForcibly();
 
+        // Also launch the detached supervisor directly. Its exclusive lock file
+        // makes this safe when Task Scheduler already started the same watchdog.
+        // This repairs stale/missing task state without making Host its parent.
         Path launcher = dir.resolve(SUPERVISOR_VBS);
         if (!Files.isRegularFile(launcher)) {
-            throw new IOException("Scheduled Recovery task is unavailable and the VBS watchdog launcher is missing.");
+            throw new IOException("The detached VBS watchdog launcher is missing.");
         }
         new ProcessBuilder("wscript.exe", "//B", "//NoLogo", launcher.toString())
                 .redirectOutput(ProcessBuilder.Redirect.DISCARD)
