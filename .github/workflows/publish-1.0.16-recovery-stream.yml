@@ -153,6 +153,7 @@ jobs:
             'com.saturn.remote.ViewerWindow$connect$1' \
             'com.saturn.remote.ViewerRecoveryBridge' \
             'com.saturn.remote.FrameRenderer'
+          rm output/host-app.jar output/viewer-app.jar
 
       - name: Publish release v1.0.16
         env:
@@ -192,6 +193,8 @@ jobs:
           EOF
           )
           if gh release view v1.0.16 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release delete-asset v1.0.16 host-app.jar --repo "$GITHUB_REPOSITORY" --yes 2>/dev/null || true
+            gh release delete-asset v1.0.16 viewer-app.jar --repo "$GITHUB_REPOSITORY" --yes 2>/dev/null || true
             gh release upload v1.0.16 output/* --repo "$GITHUB_REPOSITORY" --clobber
             gh release edit v1.0.16 --repo "$GITHUB_REPOSITORY" --title "Jenyok 1.0.16 — Independent Recovery and Viewer Stream Fix" --notes "$NOTES" --draft=false --prerelease=false
           else
