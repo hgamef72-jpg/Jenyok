@@ -42,6 +42,35 @@ OLD_LAUNCH_BLOCK = """                    try {
                         Start-Sleep -Seconds 25
                     }"""
 
+PREVIOUS_NEW_LAUNCH_BLOCK = """                    @@started = @@false
+                    @@candidates = @(@@exe, @@recoveryExe) | Select-Object -Unique
+                    foreach (@@candidateExe in @@candidates) {
+                        if (-not (Test-Path -LiteralPath @@candidateExe)) { continue }
+                        try {
+                            Write-RecoveryLog ("Starting Host candidate: {0}" -f @@candidateExe)
+                            Start-Process -FilePath @@candidateExe -WorkingDirectory (Split-Path -Parent @@candidateExe) -ErrorAction Stop | Out-Null
+                            @@check = @@null
+                            for (@@attempt = 0; @@attempt -lt 20; @@attempt++) {
+                                Start-Sleep -Seconds 1
+                                @@check = Get-HostProcess
+                                if (@@check) { break }
+                            }
+                            if (@@check) {
+                                Write-RecoveryLog ("Host restart confirmed from {0}; PID={1}" -f @@candidateExe, @@check.Id)
+                                @@forceRestart = @@false
+                                @@started = @@true
+                                break
+                            }
+                            Write-RecoveryLog ("Host did not remain running after launch from {0}; trying next candidate." -f @@candidateExe)
+                        } catch {
+                            Write-RecoveryLog ("ERROR starting Host from {0}: {1}" -f @@candidateExe, @@_.Exception.ToString())
+                        }
+                    }
+                    if (-not @@started) {
+                        Write-RecoveryLog "ERROR: Primary Host and Recovery copy both failed to start; retry delayed."
+                        Start-Sleep -Seconds 25
+                    }"""
+
 NEW_LAUNCH_BLOCK = """                    @@started = @@false
                     @@primaryRoot = Split-Path -Parent @@exe
                     @@primaryReady = (
@@ -234,16 +263,19 @@ def patch_class(data: bytes) -> bytes:
         raise ValueError(f"Expected one supervisor and installer template; found {len(supervisor)}, {len(installer)}")
     replacements = []
     s = supervisor[0]["value"]
-    if "Jenyok\\Recovery\\Host" not in s or "Host restart confirmed from {0}" not in s:
-        if SUPERVISOR_INSERT.splitlines()[0] not in s:
-            raise ValueError("Supervisor EXE insertion point changed")
-        if s.count(SUPERVISOR_OLD_CONDITION) != 1:
-            raise ValueError("Supervisor launch condition changed")
-        if s.count(OLD_LAUNCH_BLOCK) != 1:
-            raise ValueError("Supervisor launch block changed")
-        s = s.replace(SUPERVISOR_INSERT.splitlines()[0], SUPERVISOR_INSERT, 1)
-        s = s.replace(SUPERVISOR_OLD_CONDITION, SUPERVISOR_NEW_CONDITION, 1)
-        s = s.replace(OLD_LAUNCH_BLOCK, NEW_LAUNCH_BLOCK, 1)
+    if "Primary Host package is missing or incomplete" not in s:
+        if s.count(OLD_LAUNCH_BLOCK) == 1:
+            if SUPERVISOR_INSERT.splitlines()[0] not in s:
+                raise ValueError("Supervisor EXE insertion point changed")
+            if s.count(SUPERVISOR_OLD_CONDITION) != 1:
+                raise ValueError("Supervisor launch condition changed")
+            s = s.replace(SUPERVISOR_INSERT.splitlines()[0], SUPERVISOR_INSERT, 1)
+            s = s.replace(SUPERVISOR_OLD_CONDITION, SUPERVISOR_NEW_CONDITION, 1)
+            s = s.replace(OLD_LAUNCH_BLOCK, NEW_LAUNCH_BLOCK, 1)
+        elif s.count(PREVIOUS_NEW_LAUNCH_BLOCK) == 1:
+            s = s.replace(PREVIOUS_NEW_LAUNCH_BLOCK, NEW_LAUNCH_BLOCK, 1)
+        else:
+            raise ValueError("Supervisor launch block is neither the original nor the previous Recovery-copy implementation")
         replacements.append((supervisor[0], s))
 
     t = installer[0]["value"]
@@ -297,7 +329,9 @@ def patch_class(data: bytes) -> bytes:
     ins = [e["value"] for e in check if e["tag"] == 1 and "Registered hidden VBS startup entry." in e["value"]]
     if len(sup) != 1 or len(ins) != 1:
         raise ValueError("Patched PowerShell templates could not be re-read")
-    for token in ["Jenyok\\Recovery\\Host", "Host restart confirmed from {0}", "trying next candidate"]:
+    for token in ["Jenyok\\Recovery\\Host", "Host restart confirmed from {0}", "trying next candidate",
+                  "Primary Host package is missing or incomplete",
+                  "Independent Recovery copy restored the primary Host package"]:
         if token not in sup[0]: raise ValueError(f"Supervisor patch verification failed: {token}")
     for token in ["Jenyok\\Recovery\\Host", "Verified independent Recovery package:", "saturn-pc-remote.jar", "runtime", "ANY_USER_TASK_NO_UAC_V2", "Roblox12311 - Any User Logon", "BUILTIN\\Users", "& (Join-Path $PSHOME 'powershell.exe') -NoProfile -ExecutionPolicy Bypass -EncodedCommand"]:
         if token not in ins[0]: raise ValueError(f"Installer patch verification failed: {token}")
