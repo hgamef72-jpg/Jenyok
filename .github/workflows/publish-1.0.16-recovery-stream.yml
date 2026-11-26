@@ -61,7 +61,7 @@ jobs:
                   if entry.filename == "recovery-package-version.txt":
                       continue
                   target.writestr(entry, source.read(entry.filename))
-              target.writestr("recovery-package-version.txt", "1.0.16\\n")
+              target.writestr("recovery-package-version.txt", "1.0.16\n")
           temporary.replace(archive)
           with zipfile.ZipFile(archive) as check:
               if check.read("recovery-package-version.txt").decode().strip() != "1.0.16":
